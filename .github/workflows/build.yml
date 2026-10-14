@@ -11,9 +11,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Debug: list files
         run: |
-          dkp-pacman -S --noconfirm switch-curl switch-zlib switch-sdl2 switch-sdl2_image switch-libjpeg-turbo
+          ls -la
+          echo "---"
+          ls -la main.c
+          echo "---"
+          echo "DEVKITPRO=$DEVKITPRO"
+          ls -la $DEVKITPRO/libnx/
 
       - name: Build NRO
         run: make -j2
@@ -23,6 +28,6 @@ jobs:
         with:
           name: dongman-nro
           path: |
-            build/*.nro
-            build/*.elf
+            *.nro
+            *.elf
           if-no-files-found: error
