@@ -15,13 +15,13 @@ jobs:
         run: g++ -std=c++17 -Wall -Wextra -Isource source/*.cpp $(pkg-config --cflags --libs sdl2 SDL2_image SDL2_ttf mpv libcurl) -pthread -o /tmp/dongman
   switch:
     runs-on: ubuntu-latest
-    container: devkitpro/devkita64:latest
+    container: devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
     env:
       SWITCH_PROD_KEYS: ${{ secrets.SWITCH_PROD_KEYS }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Switch portlibs
-        run: dkp-pacman -Syu --noconfirm && dkp-pacman -S --needed --noconfirm switch-sdl2 switch-sdl2_image switch-sdl2_ttf switch-libmpv switch-curl switch-pkg-config
+      - name: Verify preinstalled Switch portlibs
+        run: dkp-pacman -Q switch-sdl2 switch-sdl2_image switch-sdl2_ttf switch-libmpv switch-curl switch-pkg-config
       - name: Build native client
         run: make -j2
       - name: Assemble SD card files
