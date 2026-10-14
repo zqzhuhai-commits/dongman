@@ -6,6 +6,9 @@ project(dongman C)
 #  数据源: omofun.org.cn (MacCMS)
 # ============================================================
 
+# devkitPro portlibs 路径
+set(PORTLIBS "$ENV{DEVKITPRO}/portlibs/switch")
+
 # 源文件
 set(SOURCES
     source/main.c
@@ -20,9 +23,11 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 # 头文件路径
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${PORTLIBS}/include
 )
 
-# 链接库: SDL2, curl, m, z, nx
+# 链接库
+target_link_directories(${PROJECT_NAME} PRIVATE ${PORTLIBS}/lib)
 target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL2
     SDL2_image
@@ -32,9 +37,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     nx
 )
 
-# ============================================================
-#  NRO 打包配置 (devkitPro Switch.cmake 自动处理)
-# ============================================================
 set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME "dongman"
 )
