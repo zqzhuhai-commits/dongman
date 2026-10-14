@@ -24,6 +24,10 @@ jobs:
         run: dkp-pacman -Q switch-sdl2 switch-sdl2_image switch-sdl2_ttf switch-libmpv switch-curl switch-pkg-config
       - name: Build native client
         run: make -j2
+      - name: Validate standalone NSP inputs
+        run: |
+          elf2nso dongman.elf /tmp/dongman-main
+          npdmtool packaging/application.json /tmp/dongman-main.npdm
       - name: Assemble SD card files
         run: |
           mkdir -p dist/switch/dongman
