@@ -18,15 +18,14 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${PORTLIBS}/include
 )
 
+# 使用 pkg-config 获取 SDL2 依赖
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(DEPS REQUIRED SDL2 SDL2_image libcurl)
+
 target_link_directories(${PROJECT_NAME} PRIVATE ${PORTLIBS}/lib)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    SDL2
-    SDL2_image
-    EGL
-    GLESv2
-    glad
-    curl
+    ${DEPS_LIBRARIES}
     m
     z
     nx
