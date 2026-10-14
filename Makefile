@@ -8,10 +8,12 @@ SOURCES := \
     source/ui.c \
     source/player.c
 
+export PORTLIBS := $(DEVKITPRO)/portlibs/switch
+
 include $(DEVKITPRO)/libnx/switch_rules
 
-CFLAGS := -Iinclude -I$(PORTLIBS)/include
-LDFLAGS := -L$(PORTLIBS)/lib
+CFLAGS := -Iinclude -I$(PORTLIBS)/include -I$(DEVKITPRO)/libnx/include
+LDFLAGS := -L$(PORTLIBS)/lib -L$(DEVKITPRO)/libnx/lib
 
 LIBS := -lSDL2 -lSDL2_image -lcurl -lm -lz -lnx -lstdc++
 
@@ -28,7 +30,7 @@ $(BUILD)/$(TARGET).elf: $(OFILES)
 	$(CC) $(LDFLAGS) -o $@ $(OFILES) $(LIBS)
 
 $(BUILD)/$(TARGET).nro: $(BUILD)/$(TARGET).elf
-	nacptool --create "动漫共和国" "zqzhuhai" "1.0.0" $(BUILD)/$(TARGET).nacp
+	nacptool --create "AnimeRepublic" "zqzhuhai" "1.0.0" $(BUILD)/$(TARGET).nacp
 	elf2nro $(BUILD)/$(TARGET).elf $(BUILD)/$(TARGET).nro --icon=$(DEVKITPRO)/libnx/default_icon.jpg --nacp=$(BUILD)/$(TARGET).nacp
 
 clean:
