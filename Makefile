@@ -7,12 +7,12 @@ SOURCES := \
     source/ui.c \
     source/player.c
 
-export PORTLIBS := $(DEVKITPRO)/portlibs/switch
+PORTLIBS := $(DEVKITPRO)/portlibs/switch
 
 include $(DEVKITPRO)/libnx/switch_rules
 
-CFLAGS := -Iinclude $(PORTLIBS_CFLAGS)
-LIBS := $(PORTLIBS_LIBS) -lSDL2 -lSDL2_image -lcurl -lm -lz -lnx -lstdc++
+CFLAGS := -Iinclude -I$(PORTLIBS)/include -I$(DEVKITPRO)/libnx/include
+LIBS := -L$(PORTLIBS)/lib -L$(DEVKITPRO)/libnx/lib -lSDL2 -lSDL2_image -lcurl -lm -lz -lnx -lstdc++
 
 all: $(TARGET).nro
 
