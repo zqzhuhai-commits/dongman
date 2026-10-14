@@ -14,7 +14,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 CFLAGS := -Iinclude -I$(PORTLIBS)/include -I$(DEVKITPRO)/libnx/include
 LIBS := -L$(PORTLIBS)/lib -L$(DEVKITPRO)/libnx/lib \
     -lSDL2 -lSDL2_image \
-    -lEGL -lGLESv2 -lglad -ldrm_nouveau \
+    -lEGL -lGLESv2 -lglapi -ldrm_nouveau \
     -lcurl -lm -lz -lnx -lstdc++
 
 all: $(TARGET).nro
