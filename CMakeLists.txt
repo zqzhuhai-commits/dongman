@@ -30,6 +30,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     m
     z
     nx
+    stdc++
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
