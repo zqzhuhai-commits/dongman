@@ -6,8 +6,8 @@ PORTLIBS := $(DEVKITPRO)/portlibs/switch
 
 include $(DEVKITPRO)/libnx/switch_rules
 
-CFLAGS := -Iinclude
-LIBS := -lnx
+CFLAGS := -Iinclude -I$(DEVKITPRO)/libnx/include
+LIBS := -L$(DEVKITPRO)/libnx/lib -lnx
 
 all: $(TARGET).nro
 
