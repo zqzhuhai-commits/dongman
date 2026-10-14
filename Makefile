@@ -11,8 +11,8 @@ export PORTLIBS := $(DEVKITPRO)/portlibs/switch
 
 include $(DEVKITPRO)/libnx/switch_rules
 
-CFLAGS := -Iinclude
-LIBS := -lSDL2 -lSDL2_image -lcurl -lm -lz -lnx -lstdc++
+CFLAGS := -Iinclude $(PORTLIBS_CFLAGS)
+LIBS := $(PORTLIBS_LIBS) -lSDL2 -lSDL2_image -lcurl -lm -lz -lnx -lstdc++
 
 all: $(TARGET).nro
 
