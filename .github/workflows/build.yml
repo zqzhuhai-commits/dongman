@@ -11,21 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: List available packages
-        run: dkp-pacman -Ss switch- | head -30
-
       - name: Install dependencies
         run: |
           dkp-pacman -S --noconfirm switch-curl switch-zlib switch-sdl2 switch-sdl2_image switch-libjpeg-turbo
 
-      - name: Check curl header
-        run: find $DEVKITPRO -name "curl.h" 2>/dev/null || echo "curl.h not found"
-
       - name: Build NRO
-        run: |
-          mkdir -p build && cd build
-          cmake -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/Switch.cmake -DCMAKE_BUILD_TYPE=Release ..
-          make -j2
+        run: make -j2
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
