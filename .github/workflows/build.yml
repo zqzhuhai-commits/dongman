@@ -1,61 +1,31 @@
-name: Build Anime Republic
+name: Build Dongman (动漫共和国)
 on:
   push:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  desktop-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libmpv-dev libcurl4-openssl-dev pkg-config
-      - run: bash scripts/test.sh
-      - name: Compile complete client for host validation
-        run: g++ -std=c++17 -Wall -Wextra -Isource source/*.cpp $(pkg-config --cflags --libs sdl2 SDL2_image SDL2_ttf mpv libcurl) -pthread -o /tmp/dongman
   switch:
     runs-on: ubuntu-latest
-    container: devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
-    env:
-      SWITCH_PROD_KEYS: ${{ secrets.SWITCH_PROD_KEYS }}
+    container: devkitpro/devkita64
     steps:
       - uses: actions/checkout@v4
-      - name: Verify preinstalled Switch portlibs
-        run: dkp-pacman -Q switch-sdl2 switch-sdl2_image switch-sdl2_ttf switch-libmpv switch-curl switch-pkg-config
-      - name: Build native client
-        run: make -j2
-      - name: Validate standalone NSP inputs
+
+      - name: Install dependencies
         run: |
-          elf2nso dongman.elf /tmp/dongman-main
-          npdmtool packaging/application.json /tmp/dongman-main.npdm
-      - name: Assemble SD card files
+          dkp-pacman -S --noconfirm switch-curl switch-zlib switch-sdl2 switch-sdl2_image
+
+      - name: Build NRO
         run: |
-          mkdir -p dist/switch/dongman
-          cp dongman.nro packaging/config.ini packaging/ghgdm.ini dist/switch/dongman/
-          curl --fail --location https://curl.se/ca/cacert.pem --output dist/switch/dongman/cacert.pem
-      - name: Build hacBrewPack
-        if: env.SWITCH_PROD_KEYS != ''
-        run: |
-          git clone https://github.com/pplatoon/hacBrewPack.git /tmp/hacbrewpack
-          cd /tmp/hacbrewpack
-          git checkout 56698df456eac4d5076e85499fe045a90fba790b
-          git submodule update --init --recursive
-          cp config.mk.template config.mk
+          mkdir -p build && cd build
+          cmake -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/Switch.cmake -DCMAKE_BUILD_TYPE=Release ..
           make -j2
-      - name: Package installable NSP
-        if: env.SWITCH_PROD_KEYS != ''
-        shell: bash
-        run: |
-          umask 077
-          keyfile=$(mktemp)
-          trap 'rm -f "$keyfile"' EXIT
-          printf '%s\n' "$SWITCH_PROD_KEYS" > "$keyfile"
-          SWITCH_KEYS_FILE="$keyfile" HACBREWPACK=/tmp/hacbrewpack/hacbrewpack bash scripts/package-nsp.sh
-      - name: Explain missing NSP prerequisite
-        if: env.SWITCH_PROD_KEYS == ''
-        run: echo 'NSP packaging skipped. Add SWITCH_PROD_KEYS as a repository Actions secret, then run this workflow again.' >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: dongman-switch
-          path: dist/
+          name: dongman-nro
+          path: |
+            build/dongman.nro
+            build/dongman.elf
           if-no-files-found: error
