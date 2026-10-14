@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     char *html = http_get(url);
     if (html) {
         static AnimeItem items[120];
-        int count = parser_parse_list(html, items, 120);
+        int count = parse_anime_list(html, items, 120);
         printf("[main] 解析到 %d 部番剧\n", count);
         ui_set_anime_list(items, count);
         free(html);
