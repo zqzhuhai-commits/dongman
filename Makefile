@@ -3,7 +3,7 @@ TARGET := dongman
 include $(DEVKITPRO)/libnx/switch_rules
 
 CFLAGS := -I$(DEVKITPRO)/libnx/include
-LDFLAGS := -L$(DEVKITPRO)/libnx/lib -lnx
+LDFLAGS := -L$(DEVKITPRO)/libnx/lib -lnx -T$(DEVKITPRO)/libnx/switch.ld
 
 all: $(TARGET).nro
 
