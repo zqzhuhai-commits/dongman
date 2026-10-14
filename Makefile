@@ -1,21 +1,13 @@
 TARGET := dongman
 
-SOURCES := \
-    source/main.c \
-    source/http.c \
-    source/parser.c \
-    source/ui.c \
-    source/player.c
+SOURCES := source/main.c
 
 PORTLIBS := $(DEVKITPRO)/portlibs/switch
 
 include $(DEVKITPRO)/libnx/switch_rules
 
-CFLAGS := -Iinclude -I$(PORTLIBS)/include -I$(DEVKITPRO)/libnx/include
-LIBS := -L$(PORTLIBS)/lib -L$(DEVKITPRO)/libnx/lib \
-    -lSDL2 -lSDL2_image \
-    -lEGL -lGLESv2 -lglapi -ldrm_nouveau \
-    -lcurl -lm -lz -lnx -lstdc++
+CFLAGS := -Iinclude
+LIBS := -lnx
 
 all: $(TARGET).nro
 
