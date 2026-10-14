@@ -8,6 +8,17 @@
 #include <string.h>
 
 // ============================================================
+//  按键宏映射 (libnx HidNpadButton -> 简写)
+// ============================================================
+#define KEY_DRIGHT  HidNpadButton_Right
+#define KEY_DLEFT   HidNpadButton_Left
+#define KEY_DDOWN   HidNpadButton_Down
+#define KEY_DUP     HidNpadButton_Up
+#define KEY_A       HidNpadButton_A
+#define KEY_B       HidNpadButton_B
+#define KEY_PLUS    HidNpadButton_Plus
+
+// ============================================================
 //  全局状态
 // ============================================================
 static SDL_Window   *g_window = NULL;
