@@ -1,0 +1,20 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.nro
+*.nsp
+*.elf
+
+# DevKitPro
+/devkitPro/
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
