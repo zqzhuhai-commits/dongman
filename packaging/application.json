@@ -109,7 +109,7 @@
     },
     {
       "type": "application_type",
-      "value": 0
+      "value": 1
     },
     {
       "type": "min_kernel_version",

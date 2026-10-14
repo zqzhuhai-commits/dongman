@@ -8,6 +8,7 @@ endif
 
 TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
+PKG_CONFIG := $(PORTLIBS)/bin/aarch64-none-elf-pkg-config
 
 #---------------------------------------------------------------------------------
 # TARGET is the name of the output
@@ -59,12 +60,12 @@ CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
 
-CXXFLAGS	:= $(CFLAGS) -std=gnu++17 -fno-rtti -fexceptions $(shell aarch64-none-elf-pkg-config --cflags sdl2 SDL2_image SDL2_ttf mpv libcurl)
+CXXFLAGS	:= $(CFLAGS) -std=gnu++17 -fno-rtti -fexceptions $(shell $(PKG_CONFIG) --cflags sdl2 SDL2_image SDL2_ttf mpv libcurl)
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS := $(shell aarch64-none-elf-pkg-config --static --libs mpv SDL2_image SDL2_ttf sdl2 libcurl) -lnx
+LIBS := $(shell $(PKG_CONFIG) --static --libs mpv SDL2_image SDL2_ttf sdl2 libcurl) -lnx
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

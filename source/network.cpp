@@ -40,8 +40,14 @@ Response get(const std::string &url, const std::string &referer,
   curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT, 8L);
   curl_easy_setopt(h, CURLOPT_TIMEOUT, limit == 2 * 1024 * 1024 ? 5L : 20L);
   curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
+#if LIBCURL_VERSION_NUM >= 0x075500
   curl_easy_setopt(h, CURLOPT_PROTOCOLS_STR, "http,https");
   curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+#else
+  curl_easy_setopt(h, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+  curl_easy_setopt(h, CURLOPT_REDIR_PROTOCOLS,
+                   CURLPROTO_HTTP | CURLPROTO_HTTPS);
+#endif
   curl_easy_setopt(h, CURLOPT_ACCEPT_ENCODING, "");
   curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, write);
   curl_easy_setopt(h, CURLOPT_WRITEDATA, &b);
