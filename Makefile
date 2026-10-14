@@ -2,6 +2,8 @@ TARGET := dongman
 
 include $(DEVKITPRO)/libnx/switch_rules
 
+CFLAGS := -I$(DEVKITPRO)/libnx/include
+
 all: $(TARGET).nro
 
 $(TARGET).elf: main.c
