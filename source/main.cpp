@@ -1,0 +1,108 @@
+#include "site.hpp"
+#include "network.hpp"
+#include <SDL.h>
+#include <SDL_image.h>
+#include <SDL_ttf.h>
+#include <mpv/client.h>
+#include <mpv/render.h>
+#include <curl/curl.h>
+#include <future>
+#include <memory>
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <sys/stat.h>
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+namespace {
+const int W=1280,H=720;
+struct Item {Anime anime;std::string image;};
+struct Result {int kind;std::vector<Item> items;std::vector<Episode> episodes;std::string media,error;};
+struct Player {
+ mpv_handle* handle=nullptr;mpv_render_context* context=nullptr;SDL_Texture* texture=nullptr;std::vector<unsigned char> pixels;
+ ~Player(){close();}
+ void close(){if(context)mpv_render_context_free(context);context=nullptr;if(handle)mpv_terminate_destroy(handle);handle=nullptr;if(texture)SDL_DestroyTexture(texture);texture=nullptr;}
+ void command(const char* a,const char* b=nullptr,const char* c=nullptr){const char* args[]={a,b,c,nullptr};if(mpv_command(handle,args)<0)throw std::runtime_error("播放器命令失败");}
+ void open(SDL_Renderer* r,const std::string& url,const std::string& referer,const Config& config){
+  close();handle=mpv_create();if(!handle)throw std::runtime_error("无法初始化播放器");
+  auto opt=[&](const char* k,const char* v){int e=mpv_set_option_string(handle,k,v);if(e<0)throw std::runtime_error(std::string(k)+": "+mpv_error_string(e));};
+  opt("vo","libmpv");opt("ao","sdl");opt("hwdec","no");opt("sw-fast","yes");opt("cache","yes");opt("demuxer-max-bytes","33554432");opt("user-agent","Mozilla/5.0 AnimeRepublicSwitch/0.1");opt("referrer",referer.c_str());
+  if(!config.ca_file.empty())opt("tls-ca-file",config.ca_file.c_str());opt("tls-verify","yes");
+  if(mpv_initialize(handle)<0)throw std::runtime_error("播放器初始化失败");
+  mpv_render_param init[]={{MPV_RENDER_PARAM_API_TYPE,(void*)MPV_RENDER_API_TYPE_SW},{MPV_RENDER_PARAM_INVALID,nullptr}};
+  int rc=mpv_render_context_create(&context,handle,init);if(rc<0)throw std::runtime_error(std::string("软件渲染初始化失败：")+mpv_error_string(rc));
+  pixels.resize(640*360*4);texture=SDL_CreateTexture(r,SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STREAMING,640,360);if(!texture)throw std::runtime_error(SDL_GetError());command("loadfile",url.c_str());
+ }
+ void draw(SDL_Renderer* r){int size[]={640,360};size_t stride=640*4;mpv_render_param params[]={{MPV_RENDER_PARAM_SW_SIZE,size},{MPV_RENDER_PARAM_SW_FORMAT,(void*)"rgba"},{MPV_RENDER_PARAM_SW_STRIDE,&stride},{MPV_RENDER_PARAM_SW_POINTER,pixels.data()},{MPV_RENDER_PARAM_INVALID,nullptr}};if(mpv_render_context_render(context,params)<0)throw std::runtime_error("视频渲染失败");SDL_UpdateTexture(texture,nullptr,pixels.data(),640*4);SDL_RenderCopy(r,texture,nullptr,nullptr);}
+};
+void rect(SDL_Renderer* r,int x,int y,int w,int h,SDL_Color color){SDL_SetRenderDrawColor(r,color.r,color.g,color.b,color.a);SDL_Rect b{x,y,w,h};SDL_RenderFillRect(r,&b);}
+void text(SDL_Renderer* r,TTF_Font* font,const std::string& s,int x,int y,int width=1180){if(s.empty())return;SDL_Surface* surface=TTF_RenderUTF8_Blended_Wrapped(font,s.c_str(),{235,239,249,255},width);if(!surface)return;SDL_Texture* t=SDL_CreateTextureFromSurface(r,surface);SDL_Rect dst{x,y,surface->w,std::min(surface->h,140)};SDL_Rect src{0,0,surface->w,dst.h};if(t)SDL_RenderCopy(r,t,&src,&dst);if(t)SDL_DestroyTexture(t);SDL_FreeSurface(surface);}
+std::string root(){
+#ifdef __SWITCH__
+ return "sdmc:/switch/dongman";
+#else
+ return "packaging";
+#endif
+}
+}
+int main(int argc,char** argv){
+#ifdef __SWITCH__
+ socketInitializeDefault();romfsInit();padConfigureInput(1,HidNpadStyleSet_NpadStandard);PadState pad;padInitializeDefault(&pad);
+#endif
+ int exit_code=0;SDL_Window* window=nullptr;SDL_Renderer* renderer=nullptr;TTF_Font* font=nullptr;std::vector<SDL_Texture*> covers;std::future<Result> job;std::future<Result> cover_job;int requested_cover=0;unsigned generation=0,cover_generation=0;
+ try {
+ if(curl_global_init(CURL_GLOBAL_DEFAULT)!=CURLE_OK)throw std::runtime_error("curl init failed");
+ if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_GAMECONTROLLER)!=0)throw std::runtime_error(SDL_GetError());
+ IMG_Init(IMG_INIT_PNG|IMG_INIT_JPG);if(TTF_Init()!=0)throw std::runtime_error(TTF_GetError());
+ window=SDL_CreateWindow("动漫共和国",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,W,H,0);if(!window)throw std::runtime_error(SDL_GetError());renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_SOFTWARE);if(!renderer)throw std::runtime_error(SDL_GetError());SDL_RenderSetLogicalSize(renderer,W,H);
+#ifdef __SWITCH__
+ PlFontData font_data{};if(R_FAILED(plInitialize(PlServiceType_User)))throw std::runtime_error("无法初始化系统中文字体");if(R_FAILED(plGetSharedFontByType(&font_data,PlSharedFontType_ChineseSimplified)))throw std::runtime_error("无法读取系统中文字体");font=TTF_OpenFontRW(SDL_RWFromConstMem(font_data.address,font_data.size),1,23);
+#else
+ const char* f=argc>1?argv[1]:"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";font=TTF_OpenFont(f,23);
+#endif
+ if(!font)throw std::runtime_error(TTF_GetError());
+ mkdir(root().c_str(),0777);Config config;config.load(root()+"/config.ini");std::vector<Item> catalog;std::vector<Episode> episodes;Player player;
+ bool running=true,busy=false;int screen=0,selected=0,anime_index=0,page=0;std::string status="正在连接网站…",episode_page;
+ auto start=[&](int kind,std::string url){busy=true;status="正在加载…";job=std::async(std::launch::async,[kind,url,config](){Result out{};out.kind=kind;try{auto response=get(url,config.base,config);if(kind==0){auto list=parse_catalog(response.body,response.url,config);if(list.empty())throw std::runtime_error("未识别到动漫封面。网站可能不提供目录，或需要修改 config.ini 规则。");for(auto& a:list)out.items.push_back({a,{}});}else if(kind==1){out.episodes=parse_episodes(response.body,response.url,config);if(out.episodes.empty())throw std::runtime_error("未识别到分集。请使用真实详情页校准规则。");}else if(kind==2)out.media=parse_media(response.body,response.url);else out.media=std::move(response.body);}catch(const std::exception& e){out.error=e.what();}return out;});};
+ auto release_covers=[&](){for(auto* t:covers)if(t)SDL_DestroyTexture(t);covers.clear();};
+ start(0,absolute_url(config.base,config.listing));int cover_index=0;
+ while(running){
+#ifdef __SWITCH__
+ if(!appletMainLoop())break;padUpdate(&pad);u64 buttons=padGetButtonsDown(&pad);
+ bool a=buttons&HidNpadButton_A,b=buttons&HidNpadButton_B,left=buttons&HidNpadButton_Left,right=buttons&HidNpadButton_Right,up=buttons&HidNpadButton_Up,down=buttons&HidNpadButton_Down,reload=buttons&HidNpadButton_X;
+ if(buttons&HidNpadButton_Plus)running=false;
+#else
+ bool a=false,b=false,left=false,right=false,up=false,down=false,reload=false;
+#endif
+ SDL_Event event;while(SDL_PollEvent(&event)){if(event.type==SDL_QUIT)running=false;if(event.type==SDL_KEYDOWN){auto k=event.key.keysym.sym;a|=k==SDLK_RETURN;b|=k==SDLK_ESCAPE;left|=k==SDLK_LEFT;right|=k==SDLK_RIGHT;up|=k==SDLK_UP;down|=k==SDLK_DOWN;reload|=k==SDLK_r;}}
+ if(busy&&job.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=job.get();busy=false;if(!result.error.empty()){status=result.error;}else if(result.kind==0){++generation;release_covers();catalog=std::move(result.items);covers.resize(catalog.size(),nullptr);selected=0;page=0;cover_index=0;screen=0;status="目录已加载";}else if(result.kind==1){episodes=std::move(result.episodes);screen=1;selected=0;status="选择分集开始播放";}else if(result.kind==2){try{player.open(renderer,result.media,episode_page,config);screen=2;status="正在缓冲…";}catch(const std::exception& e){player.close();status=e.what();}}}
+ if(cover_job.valid()&&cover_job.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=cover_job.get();if(cover_generation==generation&&requested_cover<(int)covers.size()){if(result.error.empty()){auto* rw=SDL_RWFromConstMem(result.media.data(),result.media.size());auto* surface=rw?IMG_Load_RW(rw,1):nullptr;if(surface){auto* scaled=SDL_CreateRGBSurfaceWithFormat(0,186,195,32,SDL_PIXELFORMAT_RGBA32);if(scaled){SDL_BlitScaled(surface,nullptr,scaled,nullptr);covers[requested_cover]=SDL_CreateTextureFromSurface(renderer,scaled);SDL_FreeSurface(scaled);}SDL_FreeSurface(surface);}}if(cover_index==requested_cover)++cover_index;}}
+ if(screen==2){
+  if(b){player.close();screen=1;status="已停止播放";}else{if(a)player.command("cycle","pause");if(left)player.command("seek","-10","relative");if(right)player.command("seek","10","relative");
+   for(;;){auto* e=mpv_wait_event(player.handle,0);if(e->event_id==MPV_EVENT_NONE)break;if(e->event_id==MPV_EVENT_FILE_LOADED)status="A 暂停/继续    ← → 快退/快进 10 秒    B 返回";if(e->event_id==MPV_EVENT_END_FILE){auto* d=(mpv_event_end_file*)e->data;status=d->error<0?std::string("播放失败：")+mpv_error_string(d->error):"播放结束";player.close();screen=1;break;}}
+  }
+ }else if(!busy){
+  if(screen==0){int count=catalog.size();if(count){int previous=selected;if(left)selected=std::max(0,selected-1);if(right)selected=std::min(count-1,selected+1);if(up)selected=std::max(0,selected-6);if(down)selected=std::min(count-1,selected+6);page=selected/12;if(previous/12!=page)cover_index=page*12;if(a){anime_index=selected;start(1,catalog[selected].anime.url);}}if(reload)start(0,absolute_url(config.base,config.listing));}
+  else{int count=episodes.size();if(up||left)selected=std::max(0,selected-1);if(down||right)selected=std::min(count-1,selected+1);if(b){screen=0;selected=anime_index;page=selected/12;cover_index=page*12;}else if(a&&count){episode_page=episodes[selected].url;start(2,episode_page);}}
+ }
+ // Cover requests are bounded to the current page and never touch SDL from the worker.
+ if(!busy&&screen==0&&!catalog.empty()){int end=std::min((int)catalog.size(),page*12+12);while(cover_index<end&&(covers[cover_index]||catalog[cover_index].anime.cover.empty()))++cover_index;if(cover_index<end&&!cover_job.valid()){requested_cover=cover_index;cover_generation=generation;auto url=catalog[cover_index].anime.cover;cover_job=std::async(std::launch::async,[url,config](){Result r{};try{r.media=get(url,config.base,config,2*1024*1024).body;}catch(const std::exception& e){r.error=e.what();}return r;});}}
+ rect(renderer,0,0,W,H,{15,19,32,255});
+ if(screen==2){player.draw(renderer);rect(renderer,0,640,W,80,{15,19,32,255});text(renderer,font,status,30,658);}else{
+ text(renderer,font,"动漫共和国",32,20);text(renderer,font,"A 确认   B 返回   X 刷新   + 退出",650,22,600);
+ if(screen==0){for(int n=page*12;n<std::min((int)catalog.size(),page*12+12);++n){int local=n-page*12,x=32+(local%6)*206,y=80+(local/6)*263;rect(renderer,x-4,y-4,194,251,n==selected?SDL_Color{120,91,250,255}:SDL_Color{30,37,55,255});if(covers[n]){SDL_Rect dst{x,y,186,195};SDL_RenderCopy(renderer,covers[n],nullptr,&dst);}text(renderer,font,catalog[n].anime.title,x+5,y+201,176);}text(renderer,font,"第 "+std::to_string(page+1)+" 页 · "+std::to_string(catalog.size())+" 部",32,612);}
+ else{text(renderer,font,catalog[anime_index].anime.title,32,80);int first=(selected/8)*8;for(int n=first;n<std::min((int)episodes.size(),first+8);++n){int y=133+(n-first)*55;rect(renderer,32,y,1216,47,n==selected?SDL_Color{120,91,250,255}:SDL_Color{30,37,55,255});text(renderer,font,episodes[n].title,48,y+8);}}
+ text(renderer,font,status,32,650,1216);
+ }
+ SDL_RenderPresent(renderer);SDL_Delay(16);
+ }
+ cancelling=true;if(job.valid())job.wait();if(cover_job.valid())cover_job.wait();release_covers();
+ }catch(const std::exception& e){std::ofstream log(root()+"/error.log");log<<e.what()<<"\n";std::cerr<<e.what()<<"\n";exit_code=1;cancelling=true;if(job.valid())job.wait();if(cover_job.valid())cover_job.wait();for(auto* t:covers)if(t)SDL_DestroyTexture(t);}
+ if(font)TTF_CloseFont(font);if(renderer)SDL_DestroyRenderer(renderer);if(window)SDL_DestroyWindow(window);TTF_Quit();IMG_Quit();SDL_Quit();curl_global_cleanup();
+#ifdef __SWITCH__
+ plExit();romfsExit();socketExit();
+#endif
+ return exit_code;
+}

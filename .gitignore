@@ -1,0 +1,12 @@
+build/
+dist/
+*.elf
+*.nso
+*.nacp
+*.npdm
+*.nro
+*.nsp
+*.keys
+*.pem
+error.log
+.nsp-stage/
