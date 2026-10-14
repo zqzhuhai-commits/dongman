@@ -1,7 +1,7 @@
 TARGET := dongman
 
-SOURCES := source/main.c
-OFILES := $(SOURCES:.c=.o)
+SOURCES := main.c
+OFILES := main.o
 
 include $(DEVKITPRO)/libnx/switch_rules
 
