@@ -4,9 +4,10 @@
 
 ## 当前交付状态
 
-- 已实现：异步 HTTP 请求、封面读取、目录分页浏览、分集列表、MP4/HLS 直连 URL 解析、播放/暂停、10 秒快进快退、中文系统字体、错误显示、TLS 证书验证。
-- 已验证：合成 HTML 样本的目录、分集、相对 URL、HTML 实体、播放器 URL 编码解析测试；Linux 完整客户端编译与 Switch 原生 NRO 编译。
-- **未验证**：两个指定网站的真实页面结构、真实媒体流及 Switch 实机性能。2026-10-14 开发环境访问 `cn.ghgdm.com.cn` 返回 404/400，访问 `omofun.org.cn` 超时。配置规则是常见站点格式的初始适配，不能据此宣称这两个网站已经能播放。
+- 已恢复完整客户端，替换仅显示 Welcome 的入口及占位播放器。包含异步 HTTP、封面网格、本页目录分屏浏览、分集与播放源区分、MP4/HLS 地址解析、播放/暂停、快进快退、中文系统字体和 TLS 验证。
+- 新增：B 取消加载、X 重读配置并刷新；配置错误与播放命令错误可在界面中恢复。
+- 已验证：解析器回归、配置加载、HTTP 重定向/错误/大小限制/取消、Linux 完整客户端编译。播放器测试使用自行生成的视频验证解码、画面渲染、暂停、跳转和停止。原生 NRO 由 GitHub Actions 单独构建验证。
+- 2026-10-15 已读取 OMOFUN 真实首页、详情与播放页：识别 48 个目录项、一个详情页的 631 个分集链接（含多播放源）及媒体地址。默认规则已加入 `/p/` 与 `/v/`。指定样本的媒体服务器返回 “Site Unavailable”，**真实网站视频及 Switch 实机播放仍未验证成功**；`cn.ghgdm.com.cn` 返回 HTTP 400，保留为未验证配置。
 - 播放器当前使用 CPU 解码和 640×360 软件渲染再缩放至屏幕，不承诺高清流畅播放。高码率视频可能卡顿，硬件解码是后续工作。
 - 需要可以运行 Homebrew 的 Switch；普通官方系统不支持本应用。
 
@@ -14,7 +15,7 @@
 
 打开本仓库 **Actions → Build Anime Republic → 成功的任务 → dongman-switch** 下载。
 
-默认生成 `switch/dongman/dongman.nro` 和 SD 卡配置文件。要生成 **`dongman.nsp`**，在仓库 **Settings → Secrets and variables → Actions** 添加名为 `SWITCH_PROD_KEYS` 的 secret，值为你自己合法取得的密钥文件内容，然后手动运行工作流。缺少密钥时会明确跳过 NSP，不会把 NRO 改名成 NSP。请勿在 Issue、聊天、源码或公开文件中提供密钥。
+推送及 PR 默认生成 `switch/dongman/dongman.nro` 和 SD 卡配置文件。要生成 **`dongman.nsp`**，在仓库 **Settings → Secrets and variables → Actions** 添加名为 `SWITCH_PROD_KEYS` 的 secret，值为你自己合法取得的密钥文件内容，然后手动运行工作流。只有手动运行会读取此 secret；缺少密钥时明确跳过 NSP。请勿在 Issue、聊天、源码或公开文件中提供密钥。
 
 NSP 是独立程序，不是指向 SD 卡 NRO 的转发器。配置与 CA 文件仍需在 SD 卡中：
 
@@ -32,8 +33,8 @@ switch/dongman/cacert.pem
 ```ini
 base_url=https://omofun.org.cn/
 listing_path=/
-detail_pattern=/(?:voddetail|detail|show)/|/vod/
-episode_pattern=/(?:vodplay|play)/
+detail_pattern=/(?:voddetail|detail|show|vod|p)/
+episode_pattern=/(?:vodplay|play|v)/
 ca_file=sdmc:/switch/dongman/cacert.pem
 ```
 
@@ -41,7 +42,7 @@ ca_file=sdmc:/switch/dongman/cacert.pem
 
 不执行网页 JavaScript，不自动绕过登录、验证码、DRM 或付费访问控制。不支持需要 JS/专用解析服务才产生的播放地址。网站若使用这类播放器，需要增加该站的正规接口适配。不要随意替换成搜索到的同名站点。
 
-要完成指定网站的接入验证，请提供 **首页 HTML、动漫详情页 HTML 和分集播放页 HTML** 样本（或开发工具导出的相关请求，去除 Cookie、令牌等私密字段），并在真机验证至少一条正常媒体流。
+目录目前仅浏览 `listing_path` 指向的页面中最多 200 项，不会自动翻到网站下一页。OMOFUN 可将此项改为 `/h/1/`、`/h/2/` 或 `/h/3/` 浏览对应分类；修改后在目录按 X 生效。要完成网站接入验证，还需可正常访问的媒体流及实机测试。
 
 ## 手柄操作
 
@@ -49,8 +50,8 @@ ca_file=sdmc:/switch/dongman/cacert.pem
 |---|---|
 | 方向键 | 选择动漫或分集 |
 | A | 确认；播放时暂停/继续 |
-| B | 返回；播放时停止并返回分集 |
-| X | 重新加载目录 |
+| B | 返回；加载时取消；播放时停止并返回分集 |
+| X | 重读配置并重新加载目录 |
 | ← / →（播放时） | 快退/快进 10 秒 |
 | + | 退出 |
 
@@ -77,7 +78,18 @@ SWITCH_KEYS_FILE=/absolute/path/to/prod.keys HACBREWPACK=/absolute/path/to/hacbr
 bash scripts/test.sh
 ```
 
-Linux 可安装 SDL2、SDL2_image、SDL2_ttf、libmpv、libcurl 开发包，用工作流中的 g++ 命令编译完整客户端。运行时第一个参数可传中文 TTF 路径；修改 `packaging/config.ini` 中的 `ca_file` 为本机 CA 路径。
+Linux 安装 SDL2、SDL2_image、SDL2_ttf、libmpv、libcurl 开发包、pkg-config 及 ffmpeg 后：
+
+```sh
+bash scripts/test-network.sh
+bash scripts/test-player.sh
+bash scripts/build-host.sh
+cp packaging/config.ini /tmp/dongman.ini
+# 将 /tmp/dongman.ini 的 ca_file 值清空，使用本机系统 CA；Switch 配置保持原样。
+build/dongman-host --config /tmp/dongman.ini --font /path/to/chinese.ttf
+```
+
+桌面操作：方向键选择、Enter 确认/暂停、Esc 返回/取消、R 重读配置，关闭窗口退出。默认桌面字体不含中文，使用中文 TTF 才能正常显示中文。
 
 ## 源码说明
 
