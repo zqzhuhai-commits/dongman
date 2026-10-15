@@ -1,5 +1,6 @@
 #include "comic.hpp"
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -172,21 +173,26 @@ std::string ComicApi::image(const std::string &id, int page) const {
   return std::move(r.body);
 }
 Shelf::Shelf(std::string filename) : path(std::move(filename)) {
-  std::ifstream in(path);
-  if (!in)
-    return;
-  try {
-    Json j;
-    in >> j;
-    for (const char *k : {"favorites", "history"})
-      if (j.contains(k) && j[k].is_object())
-        data[k] = j[k];
-  } catch (const Json::exception
-               &) { /* Preserve a damaged save until the next explicit write. */
+  // Recover the previous complete save if power was lost during replacement.
+  for (const auto &candidate : {path, path + ".bak"}) {
+    std::ifstream in(candidate);
+    if (!in)
+      continue;
+    try {
+      Json j;
+      in >> j;
+      if (!j.is_object() || !j.contains("favorites") ||
+          !j["favorites"].is_object() || !j.contains("history") ||
+          !j["history"].is_object())
+        continue;
+      data = std::move(j);
+      break;
+    } catch (const Json::exception &) {
+    }
   }
 }
 void Shelf::save() const {
-  std::string tmp = path + ".tmp";
+  const std::string tmp = path + ".tmp", backup = path + ".bak";
   {
     std::ofstream out(tmp, std::ios::trunc);
     out << data.dump(2);
@@ -194,9 +200,23 @@ void Shelf::save() const {
     if (!out)
       throw std::runtime_error("无法保存书架，请检查 SD 卡剩余空间");
   }
-  if (std::rename(tmp.c_str(), path.c_str()) != 0)
+  // Switch fsdev rename does not replace an existing destination. Rotate the
+  // old complete file first and retain it until the new file is installed.
+  bool previous = static_cast<bool>(std::ifstream(path));
+  if (previous) {
+    if (std::remove(backup.c_str()) != 0 && errno != ENOENT)
+      throw std::runtime_error("无法更新书架备份");
+    if (std::rename(path.c_str(), backup.c_str()) != 0)
+      throw std::runtime_error("无法备份书架文件");
+  }
+  if (std::rename(tmp.c_str(), path.c_str()) != 0) {
+    if (previous)
+      std::rename(backup.c_str(), path.c_str());
     throw std::runtime_error("无法更新书架文件");
+  }
+  std::remove(backup.c_str());
 }
+
 bool Shelf::favorite(const std::string &id) const {
   return data["favorites"].contains(id);
 }

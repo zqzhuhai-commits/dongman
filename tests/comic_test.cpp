@@ -49,6 +49,18 @@ int main(int argc, char **argv) {
     shelf.toggle({"one", "Comic", "Author", ""});
     assert(!shelf.favorite("one"));
   }
+  assert(std::rename(path.c_str(), (path + ".bak").c_str()) == 0);
+  {
+    Shelf recovered(path);
+    assert(recovered.list(false).size() == 1);
+    assert(recovered.data["history"]["one"]["page"] == 10);
+    recovered.save();
+  }
+  {
+    Shelf saved(path);
+    assert(saved.list(false).size() == 1);
+  }
   std::remove(path.c_str());
+  std::remove((path + ".bak").c_str());
   std::cout << "Comic parsing and persisted favorites/resume passed\n";
 }
