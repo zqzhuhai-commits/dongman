@@ -24,7 +24,12 @@ else
   cp dongman.nacp "$stage/control/control.nacp"
   cp "${DEVKITPRO}/libnx/default_icon.jpg" "$stage/control/icon_AmericanEnglish.dat"
 fi
-"$HACBREWPACK" --keyset "$SWITCH_KEYS_FILE" --exefsdir "$stage/exefs" --controldir "$stage/control" --noromfs --nologo --tempdir "$stage/temp" --ncadir "$stage/nca" --nspdir "$stage/nsp"
+# Some tool versions print unrecognized key values. Keep tool output private
+# and ephemeral instead of forwarding it to terminals or CI logs.
+if ! "$HACBREWPACK" --keyset "$SWITCH_KEYS_FILE" --exefsdir "$stage/exefs" --controldir "$stage/control" --noromfs --nologo --tempdir "$stage/temp" --ncadir "$stage/nca" --nspdir "$stage/nsp" > "$stage/packaging.log" 2>&1; then
+  echo "NSP packaging failed; verify the native inputs and required keys." >&2
+  exit 1
+fi
 shopt -s nullglob
 packages=("$stage/nsp/"*.nsp)
 if (( ${#packages[@]} != 1 )); then
