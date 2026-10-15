@@ -5,7 +5,8 @@
 #include <cassert>
 
 int main(int argc, char **argv) {
-  assert(argc == 2);
+  assert(argc == 2 || argc == 3);
+  assert(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK);
   assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) == 0);
   SDL_Window *window = SDL_CreateWindow("test", 0, 0, 640, 360, 0);
   assert(window);
@@ -14,7 +15,12 @@ int main(int argc, char **argv) {
   {
     Player player;
     Config config;
-    player.open(renderer, argv[1], "", config);
+    const std::string referer = argc == 3 ? argv[2] : "";
+    if (!referer.empty()) {
+      auto response = get_prefix(argv[1], referer, config);
+      validate_media_prefix(response.body, response.url, response.content_type);
+    }
+    player.open(renderer, argv[1], referer, config);
     bool loaded = false, rendered = false;
     Uint32 start = SDL_GetTicks();
     std::vector<unsigned char> frame(640 * 360 * 4);
@@ -48,5 +54,6 @@ int main(int argc, char **argv) {
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();
+  curl_global_cleanup();
   std::cout << "Player decoded a video frame; pause, seek and stop passed\n";
 }
