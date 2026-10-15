@@ -87,7 +87,24 @@ struct JobResult {
   int kind = 0;
   unsigned generation = 0;
 };
-enum Key { None, Up, Down, Left, Right, A, B, X, Y, L, R, ZL, ZR, Plus, Minus };
+enum Key {
+  None,
+  Up,
+  Down,
+  Left,
+  Right,
+  A,
+  B,
+  X,
+  Y,
+  L,
+  R,
+  ZL,
+  ZR,
+  Plus,
+  Minus,
+  Retry
+};
 Key keyboard(SDL_Keycode k) {
   switch (k) {
   case SDLK_UP:
@@ -114,8 +131,10 @@ Key keyboard(SDL_Keycode k) {
     return ZL;
   case SDLK_c:
     return ZR;
-  case SDLK_F5:
+  case SDLK_o:
     return Minus;
+  case SDLK_F5:
+    return Retry;
   case SDLK_F10:
     return Plus;
   default:
@@ -202,6 +221,7 @@ int main(int argc, char **argv) {
     api.network.ca_file = assets() + "cacert.pem";
     api.load(api_path);
     Shelf shelf(state_path);
+    Texture portrait_canvas(nullptr, SDL_DestroyTexture);
     Texture logo(IMG_LoadTexture(renderer, (assets() + "logo.png").c_str()),
                  SDL_DestroyTexture),
         page_texture(nullptr, SDL_DestroyTexture);
@@ -218,6 +238,7 @@ int main(int argc, char **argv) {
         page = 1, frame = 0;
     float zoom = 1, pan = 0, pan_x = 0;
     bool fit_width = false, chrome = true, running = true;
+    bool portrait = shelf.data.value("portrait", false);
     unsigned generation = 0;
     std::string status = "正在加载漫画…";
     std::function<JobResult()> pending;
@@ -309,7 +330,7 @@ int main(int argc, char **argv) {
           if (!result.error.empty()) {
             if (result.kind != 4)
               status = result.error +
-                       (result.kind == 3 ? "  按 − 重试" : "  按 Y 重试");
+                       (result.kind == 3 ? "  按右摇杆重试" : "  按 Y 重试");
             else
               status = "部分书名或封面加载失败，按 Y 刷新重试";
           } else if (result.kind == 1) {
@@ -394,6 +415,12 @@ int main(int argc, char **argv) {
           case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER:
             keys.push_back(R);
             break;
+          case SDL_CONTROLLER_BUTTON_BACK:
+            keys.push_back(Minus);
+            break;
+          case SDL_CONTROLLER_BUTTON_RIGHTSTICK:
+            keys.push_back(Retry);
+            break;
           default:
             break;
           }
@@ -403,22 +430,29 @@ int main(int argc, char **argv) {
       padUpdate(&pad);
       u64 down = padGetButtonsDown(&pad);
       const std::pair<u64, Key> mapping[] = {
-          {HidNpadButton_Up, Up},     {HidNpadButton_Down, Down},
-          {HidNpadButton_Left, Left}, {HidNpadButton_Right, Right},
-          {HidNpadButton_A, A},       {HidNpadButton_B, B},
-          {HidNpadButton_X, X},       {HidNpadButton_Y, Y},
-          {HidNpadButton_L, L},       {HidNpadButton_R, R},
-          {HidNpadButton_ZL, ZL},     {HidNpadButton_ZR, ZR},
-          {HidNpadButton_Plus, Plus}, {HidNpadButton_Minus, Minus}};
+          {HidNpadButton_Up, Up},       {HidNpadButton_Down, Down},
+          {HidNpadButton_Left, Left},   {HidNpadButton_Right, Right},
+          {HidNpadButton_A, A},         {HidNpadButton_B, B},
+          {HidNpadButton_X, X},         {HidNpadButton_Y, Y},
+          {HidNpadButton_L, L},         {HidNpadButton_R, R},
+          {HidNpadButton_ZL, ZL},       {HidNpadButton_ZR, ZR},
+          {HidNpadButton_Plus, Plus},   {HidNpadButton_Minus, Minus},
+          {HidNpadButton_StickR, Retry}};
       for (auto &m : mapping)
         if (down & m.first)
           keys.push_back(m.second);
       if (screen == 2) {
         auto stick = padGetStickPos(&pad, 1);
-        if (std::abs(stick.x) > 5000)
-          pan_x += stick.x / 32767.0f * 18;
-        if (std::abs(stick.y) > 5000)
-          pan -= stick.y / 32767.0f * 18;
+        float dx = stick.x, dy = -stick.y;
+        if (portrait) {
+          float old_dx = dx;
+          dx = dy;
+          dy = -old_dx;
+        }
+        if (std::abs(dx) > 5000)
+          pan_x += dx / 32767.0f * 18;
+        if (std::abs(dy) > 5000)
+          pan += dy / 32767.0f * 18;
       }
 #endif
       for (Key key : keys)
@@ -501,6 +535,16 @@ int main(int argc, char **argv) {
               }
             }
           } else {
+            if (portrait) {
+              if (key == Up)
+                key = Left;
+              else if (key == Right)
+                key = Up;
+              else if (key == Down)
+                key = Right;
+              else if (key == Left)
+                key = Down;
+            }
             if (key == B || key == X) {
               ++generation;
               pending = {};
@@ -553,7 +597,22 @@ int main(int argc, char **argv) {
             }
             if (key == A)
               chrome = !chrome;
-            if (key == Minus)
+            if (key == Minus) {
+              if (!portrait_canvas) {
+                portrait_canvas.reset(
+                    SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+                                      SDL_TEXTUREACCESS_TARGET, H, W));
+                if (!portrait_canvas)
+                  throw std::runtime_error("无法创建竖屏阅读画布");
+              }
+              portrait = !portrait;
+              zoom = 1;
+              pan = 0;
+              pan_x = 0;
+              shelf.data["portrait"] = portrait;
+              shelf.save();
+            }
+            if (key == Retry)
               read();
           }
         } catch (const std::exception &e) {
@@ -579,38 +638,53 @@ int main(int argc, char **argv) {
           break;
         }
       }
-      box(renderer, 0, 0, W, H, {14, 19, 32, 255});
+      bool vertical_reader = screen == 2 && portrait;
+      const int rw = vertical_reader ? H : W, rh = vertical_reader ? W : H;
+      if (vertical_reader) {
+        if (!portrait_canvas) {
+          portrait_canvas.reset(
+              SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+                                SDL_TEXTUREACCESS_TARGET, H, W));
+          if (!portrait_canvas)
+            throw std::runtime_error("无法创建竖屏阅读画布");
+        }
+        if (SDL_SetRenderTarget(renderer, portrait_canvas.get()) != 0)
+          throw std::runtime_error("无法启用竖屏阅读画布");
+        SDL_RenderSetLogicalSize(renderer, rw, rh);
+      }
+      box(renderer, 0, 0, rw, rh, {14, 19, 32, 255});
       if (screen == 2) {
-        box(renderer, 0, 0, W, H, {8, 10, 15, 255});
+        box(renderer, 0, 0, rw, rh, {8, 10, 15, 255});
         if (page_texture) {
           int iw = 0, ih = 0;
           SDL_QueryTexture(page_texture.get(), nullptr, nullptr, &iw, &ih);
-          float scale = (fit_width ? float(W) / iw
-                                   : std::min(float(W) / iw, float(H) / ih)) *
+          float scale = (fit_width ? float(rw) / iw
+                                   : std::min(float(rw) / iw, float(rh) / ih)) *
                         zoom;
           int dw = int(iw * scale), dh = int(ih * scale);
-          pan = std::clamp(pan, 0.0f, float(std::max(0, dh - H)));
-          pan_x = std::clamp(pan_x, -float(std::max(0, dw - W)) / 2,
-                             float(std::max(0, dw - W)) / 2);
-          SDL_Rect dst{(W - dw) / 2 - int(pan_x),
-                       dh <= H ? (H - dh) / 2 : -int(pan), dw, dh};
+          pan = std::clamp(pan, 0.0f, float(std::max(0, dh - rh)));
+          pan_x = std::clamp(pan_x, -float(std::max(0, dw - rw)) / 2,
+                             float(std::max(0, dw - rw)) / 2);
+          SDL_Rect dst{(rw - dw) / 2 - int(pan_x),
+                       dh <= rh ? (rh - dh) / 2 : -int(pan), dw, dh};
           SDL_RenderCopy(renderer, page_texture.get(), nullptr, &dst);
         }
         if (chrome) {
-          box(renderer, 0, 0, W, 54, {20, 27, 43, 255});
+          box(renderer, 0, 0, rw, 54, {20, 27, 43, 255});
           label(renderer, small,
                 current.title + " · 第 " + chapters[chapter].number + " 话", 28,
-                15, 980, 30);
+                15, rw - 200, 30);
           label(renderer, small,
                 std::to_string(page) + " / " +
                     std::to_string(chapters[chapter].pages),
-                1130, 15, 140, 30);
-          box(renderer, 0, 664, W, 56, {20, 27, 43, 255});
+                rw - 150, 15, 140, 30);
+          int footer = portrait ? 96 : 76;
+          box(renderer, 0, rh - footer, rw, footer, {20, 27, 43, 255});
           label(renderer, small,
                 "← → 翻页   ↑ ↓ 移动   ZL/ZR 缩放   右摇杆 移动   Y 适宽   L/R "
                 "换章   A 隐藏 "
-                "  B 目录",
-                22, 680, 1230, 30);
+                "  B 目录   − 横竖切换",
+                22, rh - footer + 12, rw - 44, footer - 16);
         }
       } else {
         box(renderer, 0, 0, W, 92, {23, 31, 49, 255});
@@ -696,8 +770,17 @@ int main(int argc, char **argv) {
         }
       }
       if (!status.empty()) {
-        box(renderer, 20, 611, 1240, 49, {48, 42, 46, 255});
-        label(renderer, small, status, 32, 619, 1212, 36, {255, 213, 157, 255});
+        int sy = vertical_reader ? rh - 170 : 611;
+        box(renderer, 20, sy, rw - 40, 64, {48, 42, 46, 255});
+        label(renderer, small, status, 32, sy + 8, rw - 64, 52,
+              {255, 213, 157, 255});
+      }
+      if (vertical_reader) {
+        SDL_SetRenderTarget(renderer, nullptr);
+        SDL_RenderSetLogicalSize(renderer, W, H);
+        SDL_Rect rotated{(W - H) / 2, (H - W) / 2, H, W};
+        SDL_RenderCopyEx(renderer, portrait_canvas.get(), nullptr, &rotated, 90,
+                         nullptr, SDL_FLIP_NONE);
       }
       SDL_RenderPresent(renderer);
       if (frames > 0 && ++frame >= frames)

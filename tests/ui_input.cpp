@@ -10,8 +10,11 @@ extern "C" int SDL_PollEvent(SDL_Event *event) {
     int ms;
     SDL_Keycode key;
   } script[] = {{1200, SDLK_RETURN}, {2200, SDLK_x},      {2600, SDLK_RETURN},
-                {3900, SDLK_RIGHT},  {4900, SDLK_y},      {5300, SDLK_c},
-                {5800, SDLK_ESCAPE}, {6300, SDLK_RETURN}, {7600, SDLK_F10}};
+                {3900, SDLK_RIGHT},  {4500, SDLK_o},      {4900, SDLK_DOWN},
+                {5300, SDLK_UP},     {5700, SDLK_o},      {6100, SDLK_RIGHT},
+                {6500, SDLK_LEFT},   {6900, SDLK_o},      {7300, SDLK_y},
+                {7700, SDLK_c},      {8100, SDLK_ESCAPE}, {8700, SDLK_RETURN},
+                {10100, SDLK_F10}};
   auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                      Clock::now() - start)
                      .count();
