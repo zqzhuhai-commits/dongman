@@ -1,0 +1,20 @@
+name: Publish standalone NSP
+on:
+  push:
+    branches: [codex/upload-standalone-nsp]
+    paths:
+      - release-upload/**
+      - .github/workflows/publish-nsp.yml
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify and publish installation package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 release-upload/publish.py
