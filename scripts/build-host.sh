@@ -4,5 +4,5 @@ cd "$(dirname "$0")/.."
 output=${1:-build/dongman-host}
 mkdir -p "$(dirname "$output")"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -Isource source/*.cpp \
-  $(pkg-config --cflags --libs sdl2 SDL2_image SDL2_ttf mpv libcurl) \
+  $(pkg-config --cflags --libs sdl2 SDL2_image SDL2_ttf libcurl) \
   -pthread -o "$output"

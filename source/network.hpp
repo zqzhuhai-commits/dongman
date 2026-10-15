@@ -13,3 +13,6 @@ Response get(const std::string &url, const std::string &referer,
              const Config &config, size_t limit = 8 * 1024 * 1024);
 Response get_prefix(const std::string &url, const std::string &referer,
                     const Config &config, size_t limit = 16384);
+Response api_request(const std::string &url, const Config &config,
+                     const std::string &key, const std::string *body = nullptr,
+                     size_t limit = 16 * 1024 * 1024);

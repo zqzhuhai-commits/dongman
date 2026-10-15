@@ -12,3 +12,4 @@ dist/
 error.log
 .nsp-stage/
 nsp-inputs/
+romfs/client.json

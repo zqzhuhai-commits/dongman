@@ -1,4 +1,4 @@
-name: Build Anime Republic
+name: Build Comic Republic
 on:
   push:
   pull_request:
@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libmpv-dev libcurl4-openssl-dev pkg-config ffmpeg
+      - run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libcurl4-openssl-dev pkg-config
       - run: bash scripts/test.sh
       - name: Compile complete client for host validation
         run: bash scripts/build-host.sh /tmp/dongman
       - run: bash scripts/test-network.sh
-      - run: bash scripts/test-player.sh
+      - run: bash scripts/test-comic.sh
       - run: /tmp/dongman --help
   switch:
     runs-on: ubuntu-latest
@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify preinstalled Switch portlibs
-        run: dkp-pacman -Q switch-sdl2 switch-sdl2_image switch-sdl2_ttf switch-libmpv switch-curl switch-pkg-config
+        run: dkp-pacman -Q switch-sdl2 switch-sdl2_image switch-sdl2_ttf switch-curl switch-pkg-config
       - name: Build native client
         run: make -j2
       - name: Validate standalone NSP inputs
@@ -48,7 +48,7 @@ jobs:
       - name: Assemble SD card files
         run: |
           mkdir -p dist/switch/dongman
-          cp dongman.nro packaging/config.ini packaging/ghgdm.ini dist/switch/dongman/
+          cp dongman.nro dist/switch/dongman/
       - name: Build hacBrewPack
         if: env.SWITCH_PROD_KEYS != ''
         run: |

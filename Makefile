@@ -45,7 +45,7 @@ DATA		:=	data
 INCLUDES	:=	source
 APP_TITLE := 动漫共和国
 APP_AUTHOR := zqzhuhai
-APP_VERSION := 0.1.2
+APP_VERSION := 0.2.0
 APP_TITLEID := 0100D06A6E000000
 ICON := packaging/icon.jpg
 ROMFS	:=	romfs
@@ -60,12 +60,12 @@ CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
 
-CXXFLAGS	:= $(CFLAGS) -std=gnu++17 -fno-rtti -fexceptions $(shell $(PKG_CONFIG) --cflags sdl2 SDL2_image SDL2_ttf mpv libcurl)
+CXXFLAGS	:= $(CFLAGS) -std=gnu++17 -fno-rtti -fexceptions $(shell $(PKG_CONFIG) --cflags sdl2 SDL2_image SDL2_ttf libcurl)
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS := $(shell $(PKG_CONFIG) --static --libs mpv SDL2_image SDL2_ttf sdl2 libcurl) -lnx
+LIBS := $(shell $(PKG_CONFIG) --static --libs SDL2_image SDL2_ttf sdl2 libcurl) -lnx
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

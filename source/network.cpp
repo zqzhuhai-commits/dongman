@@ -17,8 +17,11 @@ size_t write(char *data, size_t size, size_t count, void *p) {
   }
   size_t n = size * count;
   if (n > b.limit - b.data.size()) {
-    try { b.data.append(data, b.limit - b.data.size()); }
-    catch (...) { return 0; }
+    try {
+      b.data.append(data, b.limit - b.data.size());
+    } catch (...) {
+      return 0;
+    }
     b.too_large = true;
     return 0;
   }
@@ -34,7 +37,9 @@ int progress(void *, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
 }
 } // namespace
 static Response request(const std::string &url, const std::string &referer,
-                        const Config &c, size_t limit, bool prefix) {
+                        const Config &c, size_t limit, bool prefix,
+                        const std::string &key = {},
+                        const std::string *body = nullptr) {
   if (cancelling)
     throw std::runtime_error("请求已取消");
   CURL *h = curl_easy_init();
@@ -47,6 +52,20 @@ static Response request(const std::string &url, const std::string &referer,
   curl_easy_setopt(h, CURLOPT_USERAGENT, HTTP_USER_AGENT);
   curl_easy_setopt(h, CURLOPT_REFERER, referer.c_str());
   curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
+  curl_slist *headers = nullptr;
+  if (!key.empty()) {
+    headers = curl_slist_append(headers, ("X-API-Key: " + key).c_str());
+    // Never forward the client header to another host via redirects.
+    curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 0L);
+  }
+  headers = curl_slist_append(headers, "Accept: application/json, image/*");
+  if (body) {
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    curl_easy_setopt(h, CURLOPT_POSTFIELDS, body->c_str());
+    curl_easy_setopt(h, CURLOPT_POSTFIELDSIZE_LARGE,
+                     static_cast<curl_off_t>(body->size()));
+  }
+  curl_easy_setopt(h, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
   curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
   curl_easy_setopt(h, CURLOPT_MAXREDIRS, 5L);
@@ -79,9 +98,11 @@ static Response request(const std::string &url, const std::string &referer,
   std::string final = effective ? effective : url;
   std::string mime = content_type ? content_type : "";
   curl_easy_cleanup(h);
+  curl_slist_free_all(headers);
   bool prefix_complete = prefix && b.too_large && code == CURLE_WRITE_ERROR;
   if (b.too_large && !prefix_complete)
-    throw std::runtime_error("响应超过大小限制：" + std::to_string(limit) + " 字节");
+    throw std::runtime_error("响应超过大小限制：" + std::to_string(limit) +
+                             " 字节");
   if (code != CURLE_OK && !prefix_complete)
     throw std::runtime_error(std::string("网络失败：") +
                              (error[0] ? error : curl_easy_strerror(code)));
@@ -97,4 +118,9 @@ Response get(const std::string &url, const std::string &referer,
 Response get_prefix(const std::string &url, const std::string &referer,
                     const Config &c, size_t limit) {
   return request(url, referer, c, limit, true);
+}
+Response api_request(const std::string &url, const Config &c,
+                     const std::string &key, const std::string *body,
+                     size_t limit) {
+  return request(url, "", c, limit, false, key, body);
 }
