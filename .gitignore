@@ -1,20 +1,15 @@
-# Build artifacts
 build/
-*.o
-*.a
+dist/
+*.elf
+*.nso
+*.nacp
+*.npdm
 *.nro
 *.nsp
-*.elf
-
-# DevKitPro
-/devkitPro/
-
-# IDE
-.vs/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
+*.keys
+*.pem
+!romfs/cacert.pem
+error.log
+.nsp-stage/
+nsp-inputs/
+romfs/client.json

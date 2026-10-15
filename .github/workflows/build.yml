@@ -1,33 +1,79 @@
-name: Build Dongman (动漫共和国)
+name: Build Comic Republic
 on:
   push:
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  switch:
+  desktop-check:
     runs-on: ubuntu-latest
-    container: devkitpro/devkita64
     steps:
       - uses: actions/checkout@v4
-
-      - name: Debug: list files
-        run: |
-          ls -la
-          echo "---"
-          ls -la main.c
-          echo "---"
-          echo "DEVKITPRO=$DEVKITPRO"
-          ls -la $DEVKITPRO/libnx/
-
-      - name: Build NRO
+      - run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libcurl4-openssl-dev pkg-config
+      - run: bash scripts/test.sh
+      - name: Compile complete client for host validation
+        run: bash scripts/build-host.sh /tmp/dongman
+      - run: bash scripts/test-network.sh
+      - run: bash scripts/test-comic.sh
+      - run: /tmp/dongman --help
+      - name: Exercise complete comic reader UI
+        run: python3 tests/ui_test.py /tmp/dongman
+  switch:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
+    env:
+      SWITCH_PROD_KEYS: ${{ github.event_name == 'workflow_dispatch' && secrets.SWITCH_PROD_KEYS || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify preinstalled Switch portlibs
+        run: dkp-pacman -Q switch-sdl2 switch-sdl2_image switch-sdl2_ttf switch-curl switch-pkg-config
+      - name: Build native client
         run: make -j2
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Validate standalone NSP inputs
+        run: |
+          elf2nso dongman.elf /tmp/dongman-main
+          npdmtool packaging/application.json /tmp/dongman-main.npdm
+      - name: Assemble local NSP packaging inputs
+        run: |
+          mkdir -p nsp-inputs/exefs nsp-inputs/control
+          cp /tmp/dongman-main nsp-inputs/exefs/main
+          cp /tmp/dongman-main.npdm nsp-inputs/exefs/main.npdm
+          cp dongman.nacp nsp-inputs/control/control.nacp
+          cp packaging/icon.jpg nsp-inputs/control/icon_AmericanEnglish.dat
+          cp -R romfs nsp-inputs/romfs
+      - uses: actions/upload-artifact@v4
         with:
-          name: dongman-nro
-          path: |
-            *.nro
-            *.elf
+          name: dongman-nsp-inputs
+          path: nsp-inputs/
+          if-no-files-found: error
+      - name: Assemble SD card files
+        run: |
+          mkdir -p dist/switch/dongman
+          cp dongman.nro dist/switch/dongman/
+      - name: Build hacBrewPack
+        if: env.SWITCH_PROD_KEYS != ''
+        run: |
+          git clone https://github.com/pplatoon/hacBrewPack.git /tmp/hacbrewpack
+          cd /tmp/hacbrewpack
+          git checkout 56698df456eac4d5076e85499fe045a90fba790b
+          git submodule update --init --recursive
+          cp config.mk.template config.mk
+          make -j2
+      - name: Package installable NSP
+        if: env.SWITCH_PROD_KEYS != ''
+        shell: bash
+        run: |
+          umask 077
+          keyfile=$(mktemp)
+          trap 'rm -f "$keyfile"' EXIT
+          printf '%s\n' "$SWITCH_PROD_KEYS" > "$keyfile"
+          SWITCH_KEYS_FILE="$keyfile" HACBREWPACK=/tmp/hacbrewpack/hacbrewpack bash scripts/package-nsp.sh
+      - name: Explain missing NSP prerequisite
+        if: env.SWITCH_PROD_KEYS == ''
+        run: echo 'NSP packaging skipped. Add SWITCH_PROD_KEYS as a repository Actions secret, then run this workflow again.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dongman-switch
+          path: dist/
           if-no-files-found: error
