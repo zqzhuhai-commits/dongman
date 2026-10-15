@@ -4,6 +4,7 @@
 #include <SDL_ttf.h>
 #include <algorithm>
 #include <chrono>
+#include <curl/curl.h>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -629,7 +630,7 @@ int main(int argc, char **argv) {
             auto &s = books[i];
             if (covers.count(s.id)) {
               SDL_Rect dst{x + 8, y + 8, 110, 164};
-              SDL_RenderCopy(renderer, covers[s.id].get(), nullptr, &dst);
+              SDL_RenderCopy(renderer, covers.at(s.id).get(), nullptr, &dst);
             } else {
               box(renderer, x + 8, y + 8, 110, 164, {39, 53, 78, 255});
               label(renderer, font, "漫画", x + 33, y + 69, 90, 40,
