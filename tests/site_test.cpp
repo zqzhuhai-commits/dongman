@@ -38,8 +38,24 @@ int main() {
       R"html(<section class="tab"><a href="/v/63232-1-1/" onclick="play(this)">第01集</a></section><section class="tab"><a href="/v/63232-2-1/">第01集</a></section>)html",
       c.base, c);
   assert(episodes.size() == 2 &&
-         episodes[0].title == "播放源 1 · 第01集" &&
-         episodes[1].title == "播放源 2 · 第01集");
+         episodes[0].title == "第01集" && episodes[0].source == "1" &&
+         episodes[1].title == "第01集" && episodes[1].source == "2");
+  auto groups = parse_sources(
+      R"(<a href='/v/1-3-1/'>第1集</a><a href='/v/1-1-1/'>第1集</a><a href='/v/1-3-2/'>第2集</a><a href='/v/1-1-1/'>重复</a>)", base, c);
+  assert(groups.size() == 2 && groups[0].id == "3" &&
+         groups[0].episodes.size() == 2 && groups[1].episodes.size() == 1);
+  assert(groups[0].episodes[1].title == "第2集");
+  assert(parse_sources("<html>empty</html>", base, c).empty());
+  assert(encode_http_url("https://cdn.org/第1集.m3u8?x=a%2Fb") ==
+         "https://cdn.org/%E7%AC%AC1%E9%9B%86.m3u8?x=a%2Fb");
+  validate_media_prefix("#EXTM3U\n#EXTINF:1\na.ts", "https://cdn.org/a.m3u8", "text/plain");
+  validate_media_prefix("\xef\xbb\xbf#EXTM3U\n", "https://cdn.org/a.m3u8", "");
+  for (const auto &body : {"<html>Site Unavailable</html>", "Forbidden", ""}) {
+    bool rejected = false;
+    try { validate_media_prefix(body, "https://cdn.org/a.m3u8", "text/plain"); }
+    catch (const std::exception &) { rejected = true; }
+    assert(rejected);
+  }
   assert(parse_media(R"(<video src='//cdn.org/v.mp4?token=1&amp;x=2'></video>)",
                      base) == "https://cdn.org/v.mp4?token=1&x=2");
   assert(

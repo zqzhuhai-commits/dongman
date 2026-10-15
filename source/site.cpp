@@ -1,4 +1,5 @@
 #include "site.hpp"
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <regex>
@@ -265,7 +266,7 @@ std::vector<Episode> parse_episodes(const std::string &html,
   std::vector<Episode> out;
   std::set<std::string> seen;
   std::regex re(R"(<a\b([^>]*)>([\s\S]*?)</a\s*>)", std::regex::icase),
-      pattern(cfg.episode_pattern), source(R"(/v/[0-9]+-([0-9]+)-[0-9]+/)");
+      pattern(cfg.episode_pattern), source(R"(/(?:v|vodplay|play)/[0-9]+-([0-9]+)-[0-9]+)");
   for (auto i = std::sregex_iterator(html.begin(), html.end(), re);
        i != std::sregex_iterator(); ++i) {
     auto a = attrs((*i)[1]);
@@ -276,14 +277,55 @@ std::vector<Episode> parse_episodes(const std::string &html,
     if (title.empty())
       title = a["title"];
     std::smatch line;
-    if (!title.empty() && std::regex_search(u, line, source))
-      title = "播放源 " + line[1].str() + " · " + title;
     if (!title.empty())
-      out.push_back({title, u});
+      out.push_back({title, u, std::regex_search(u, line, source) ? line[1].str() : "1"});
     if (out.size() >= 2000)
       break;
   }
   return out;
+}
+std::vector<PlaySource> parse_sources(const std::string &html,
+                                     const std::string &base, const Config &cfg) {
+  std::vector<PlaySource> sources;
+  for (auto &episode : parse_episodes(html, base, cfg)) {
+    auto group = std::find_if(sources.begin(), sources.end(), [&](const PlaySource &s) {
+      return s.id == episode.source;
+    });
+    if (group == sources.end()) {
+      sources.push_back({episode.source, "播放源 " + episode.source, {}});
+      group = sources.end() - 1;
+    }
+    group->episodes.push_back(std::move(episode));
+  }
+  return sources;
+}
+std::string encode_http_url(const std::string &url) {
+  const char *hex = "0123456789ABCDEF";
+  std::string out;
+  for (unsigned char c : url) {
+    if (c <= 32 || c >= 127 || std::string("\"<>\\^`{|}").find(c) != std::string::npos) {
+      out += '%'; out += hex[c >> 4]; out += hex[c & 15];
+    } else out += char(c);
+  }
+  return out;
+}
+void validate_media_prefix(const std::string &body, const std::string &url,
+                           const std::string &content_type) {
+  auto start = body.find_first_not_of(" \r\n\t");
+  if (body.compare(0, 3, "\xef\xbb\xbf") == 0)
+    start = body.find_first_not_of(" \r\n\t", 3);
+  auto prefix = start == body.npos ? std::string{} : body.substr(start, 64);
+  std::string lower = prefix, mime = content_type;
+  for (char &c : lower) c = std::tolower((unsigned char)c);
+  for (char &c : mime) c = std::tolower((unsigned char)c);
+  if (prefix.empty())
+    throw std::runtime_error("视频服务器返回空内容，请切换播放源");
+  if (mime.find("text/html") != mime.npos || lower.rfind("<html", 0) == 0 ||
+      lower.rfind("<!doctype", 0) == 0)
+    throw std::runtime_error("视频服务器返回错误网页，请切换播放源");
+  if (std::regex_search(url, std::regex(R"(\.m3u8(?:[?#]|$))", std::regex::icase)) &&
+      prefix.rfind("#EXTM3U", 0) != 0)
+    throw std::runtime_error("视频服务器未返回有效 HLS 播放列表，请切换播放源");
 }
 std::string parse_media(const std::string &html, const std::string &base) {
   std::regex tag(R"(<(?:video|source)\b([^>]*)>)", std::regex::icase);
@@ -292,7 +334,7 @@ std::string parse_media(const std::string &html, const std::string &base) {
     auto a = attrs((*i)[1]);
     auto u = absolute_url(base, a["src"]);
     if (!u.empty())
-      return u;
+      return encode_http_url(u);
   }
   std::smatch p;
   std::regex player(R"((?:var\s+)?player_[A-Za-z0-9_]+\s*=\s*(\{[\s\S]*?\}))");
@@ -310,7 +352,7 @@ std::string parse_media(const std::string &html, const std::string &base) {
         u = percent(b64(u));
       u = absolute_url(base, u);
       if (media(u))
-        return u;
+        return encode_http_url(u);
     }
   }
   throw std::runtime_error("未找到直连媒体：可能需要 "

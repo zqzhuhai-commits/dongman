@@ -24,6 +24,8 @@ int main(int argc, char **argv) {
   };
   fails("/missing", 100, "HTTP 404");
   fails("/large", 16, "大小限制");
+  auto prefix = get_prefix(base + "/large", base, config, 16);
+  assert(prefix.body == std::string(16, 'x'));
   fails("/bad-redirect", 100, "网络失败");
   cancelling = true;
   fails("/ok", 100, "取消");

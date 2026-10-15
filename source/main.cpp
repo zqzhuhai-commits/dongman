@@ -25,14 +25,15 @@ struct Item {
 struct JobResult {
   int kind;
   std::vector<Item> items;
-  std::vector<Episode> episodes;
-  std::string media, error;
+  std::vector<PlaySource> sources;
+  std::string media, referer, error;
 };
 struct Player {
   mpv_handle *handle = nullptr;
   mpv_render_context *context = nullptr;
   SDL_Texture *texture = nullptr;
   std::vector<unsigned char> pixels;
+  std::string error_detail;
   ~Player() { close(); }
   void close() {
     if (context)
@@ -54,6 +55,7 @@ struct Player {
   void open(SDL_Renderer *r, const std::string &url, const std::string &referer,
             const Config &config) {
     close();
+    error_detail.clear();
     handle = mpv_create();
     if (!handle)
       throw std::runtime_error("无法初始化播放器");
@@ -67,13 +69,14 @@ struct Player {
     opt("hwdec", "no");
     opt("cache", "yes");
     opt("demuxer-max-bytes", "33554432");
-    opt("user-agent", "Mozilla/5.0 AnimeRepublicSwitch/0.1");
+    opt("user-agent", HTTP_USER_AGENT);
     opt("referrer", referer.c_str());
     if (!config.ca_file.empty())
       opt("tls-ca-file", config.ca_file.c_str());
     opt("tls-verify", "yes");
     if (mpv_initialize(handle) < 0)
       throw std::runtime_error("播放器初始化失败");
+    mpv_request_log_messages(handle, "warn");
     mpv_render_param init[] = {
         {MPV_RENDER_PARAM_API_TYPE, (void *)MPV_RENDER_API_TYPE_SW},
         {MPV_RENDER_PARAM_INVALID, nullptr}};
@@ -176,6 +179,7 @@ int main(int argc, char **argv) {
   SDL_Window *window = nullptr;
   SDL_Renderer *renderer = nullptr;
   TTF_Font *font = nullptr;
+  SDL_Texture *logo = nullptr;
   std::vector<SDL_Texture *> covers;
   std::future<JobResult> job;
   std::future<JobResult> cover_job;
@@ -199,6 +203,11 @@ int main(int argc, char **argv) {
       throw std::runtime_error(SDL_GetError());
     SDL_RenderSetLogicalSize(renderer, W, H);
 #ifdef __SWITCH__
+    logo = IMG_LoadTexture(renderer, "romfs:/logo.png");
+#else
+    logo = IMG_LoadTexture(renderer, "romfs/logo.png");
+#endif
+#ifdef __SWITCH__
     PlFontData font_data{};
     if (R_FAILED(plInitialize(PlServiceType_User)))
       throw std::runtime_error("无法初始化系统中文字体");
@@ -215,7 +224,9 @@ int main(int argc, char **argv) {
     mkdir(root().c_str(), 0777);
     Config config;
     std::vector<Item> catalog;
-    std::vector<Episode> episodes;
+    std::vector<PlaySource> sources;
+    std::vector<int> source_positions;
+    int active_source = 0;
     Player player;
     bool running = true, busy = false, cancel_requested = false;
     int screen = 0, selected = 0, anime_index = 0, page = 0;
@@ -238,12 +249,17 @@ int main(int argc, char **argv) {
             for (auto &a : list)
               out.items.push_back({a, {}});
           } else if (kind == 1) {
-            out.episodes = parse_episodes(response.body, response.url, config);
-            if (out.episodes.empty())
+            out.sources = parse_sources(response.body, response.url, config);
+            if (out.sources.empty())
               throw std::runtime_error(
                   "未识别到分集。请使用真实详情页校准规则。");
-          } else if (kind == 2)
-            out.media = parse_media(response.body, response.url);
+          } else if (kind == 2) {
+            auto media = parse_media(response.body, response.url);
+            auto check = get_prefix(media, response.url, config);
+            validate_media_prefix(check.body, check.url, check.content_type);
+            out.media = check.url;
+            out.referer = response.url;
+          }
           else
             out.media = std::move(response.body);
         } catch (const std::exception &e) {
@@ -280,11 +296,14 @@ int main(int argc, char **argv) {
            right = buttons & HidNpadButton_Right,
            up = buttons & HidNpadButton_Up, down = buttons & HidNpadButton_Down,
            reload = buttons & HidNpadButton_X;
+      bool previous_source = buttons & HidNpadButton_L,
+           next_source = buttons & HidNpadButton_R;
       if (buttons & HidNpadButton_Plus)
         running = false;
 #else
       bool a = false, b = false, left = false, right = false, up = false,
            down = false, reload = false;
+      bool previous_source = false, next_source = false;
 #endif
       SDL_Event event;
       while (SDL_PollEvent(&event)) {
@@ -299,6 +318,8 @@ int main(int argc, char **argv) {
           up |= k == SDLK_UP;
           down |= k == SDLK_DOWN;
           reload |= k == SDLK_r;
+          previous_source |= k == SDLK_q;
+          next_source |= k == SDLK_e;
         }
       }
       if (!running)
@@ -319,6 +340,7 @@ int main(int argc, char **argv) {
           status = "已取消加载";
         } else if (!result.error.empty()) {
           status = result.error;
+          std::ofstream(root() + "/playback.log", std::ios::app) << status << '\n';
         } else if (result.kind == 0) {
           ++generation;
           release_covers();
@@ -330,13 +352,14 @@ int main(int argc, char **argv) {
           screen = 0;
           status = "目录已加载";
         } else if (result.kind == 1) {
-          episodes = std::move(result.episodes);
+          sources = std::move(result.sources);
+          source_positions.assign(sources.size(), 0);
+          active_source = 0;
           screen = 1;
-          selected = 0;
-          status = "选择分集开始播放";
+          status = "← → / L R 切换播放源    ↑ ↓ 选择分集    A 播放";
         } else if (result.kind == 2) {
           try {
-            player.open(renderer, result.media, episode_page, config);
+            player.open(renderer, result.media, result.referer, config);
             screen = 2;
             status = "正在缓冲…";
           } catch (const std::exception &e) {
@@ -387,12 +410,20 @@ int main(int argc, char **argv) {
               auto *e = mpv_wait_event(player.handle, 0);
               if (e->event_id == MPV_EVENT_NONE)
                 break;
+              if (e->event_id == MPV_EVENT_LOG_MESSAGE) {
+                auto *log = static_cast<mpv_event_log_message *>(e->data);
+                player.error_detail = std::string(log->prefix) + ": " + log->text;
+                std::replace(player.error_detail.begin(), player.error_detail.end(), '\n', ' ');
+                if (player.error_detail.size() > 220) player.error_detail.resize(220);
+                std::ofstream(root() + "/playback.log", std::ios::app)
+                    << log->prefix << ": " << log->text;
+              }
               if (e->event_id == MPV_EVENT_FILE_LOADED)
                 status = "A 暂停/继续    ← → 快退/快进 10 秒    B 返回";
               if (e->event_id == MPV_EVENT_END_FILE) {
                 auto *d = (mpv_event_end_file *)e->data;
-                status = d->error < 0 ? std::string("播放失败：") +
-                                            mpv_error_string(d->error)
+                status = d->error < 0 ? std::string("播放失败，请切源：") +
+                                            (player.error_detail.empty() ? mpv_error_string(d->error) : player.error_detail)
                                       : "播放结束";
                 player.close();
                 screen = 1;
@@ -429,18 +460,24 @@ int main(int argc, char **argv) {
           if (reload && !busy)
             reload_catalog();
         } else {
+          if (left || previous_source)
+            active_source = std::max(0, active_source - 1);
+          if (right || next_source)
+            active_source = std::min((int)sources.size() - 1, active_source + 1);
+          auto &episodes = sources[active_source].episodes;
+          int &episode_selection = source_positions[active_source];
           int count = episodes.size();
-          if (up || left)
-            selected = std::max(0, selected - 1);
-          if (down || right)
-            selected = std::min(count - 1, selected + 1);
+          if (up)
+            episode_selection = std::max(0, episode_selection - 1);
+          if (down)
+            episode_selection = std::min(count - 1, episode_selection + 1);
           if (b) {
             screen = 0;
             selected = anime_index;
             page = selected / 12;
             cover_index = page * 12;
           } else if (a && count) {
-            episode_page = episodes[selected].url;
+            episode_page = episodes[episode_selection].url;
             start(2, episode_page);
           }
         }
@@ -479,7 +516,11 @@ int main(int argc, char **argv) {
         rect(renderer, 0, 640, W, 80, {15, 19, 32, 255});
         text(renderer, font, status, 30, 658);
       } else {
-        text(renderer, font, "动漫共和国", 32, 20);
+        if (logo) {
+          SDL_Rect logo_rect{32, 12, 48, 48};
+          SDL_RenderCopy(renderer, logo, nullptr, &logo_rect);
+        }
+        text(renderer, font, "动漫共和国", logo ? 94 : 32, 20);
         text(renderer, font, "A 确认   B 返回   X 刷新   + 退出", 650, 22, 600);
         if (screen == 0) {
           for (int n = page * 12;
@@ -501,15 +542,26 @@ int main(int argc, char **argv) {
                32, 612);
         } else {
           text(renderer, font, catalog[anime_index].anime.title, 32, 80);
-          int first = (selected / 8) * 8;
+          int first_tab = active_source / 6 * 6;
+          for (int n = first_tab; n < std::min((int)sources.size(), first_tab + 6); ++n) {
+            int x = 32 + (n - first_tab) * 204;
+            rect(renderer, x, 122, 194, 44,
+                 n == active_source ? SDL_Color{120, 91, 250, 255} : SDL_Color{30, 37, 55, 255});
+            text(renderer, font, sources[n].title, x + 10, 129, 180, 30);
+          }
+          const auto &episodes = sources[active_source].episodes;
+          int episode_selection = source_positions[active_source];
+          int first = (episode_selection / 8) * 8;
           for (int n = first; n < std::min((int)episodes.size(), first + 8);
                ++n) {
-            int y = 133 + (n - first) * 55;
-            rect(renderer, 32, y, 1216, 47,
-                 n == selected ? SDL_Color{120, 91, 250, 255}
+            int y = 181 + (n - first) * 52;
+            rect(renderer, 32, y, 1216, 44,
+                 n == episode_selection ? SDL_Color{120, 91, 250, 255}
                                : SDL_Color{30, 37, 55, 255});
             text(renderer, font, episodes[n].title, 48, y + 8);
           }
+          text(renderer, font, sources[active_source].title + " · " +
+               std::to_string(episodes.size()) + " 集    L/R 切源", 32, 610);
         }
         text(renderer, font, status, 32, 650, 1216);
       }
@@ -538,6 +590,8 @@ int main(int argc, char **argv) {
   }
   if (font)
     TTF_CloseFont(font);
+  if (logo)
+    SDL_DestroyTexture(logo);
   if (renderer)
     SDL_DestroyRenderer(renderer);
   if (window)

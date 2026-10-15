@@ -24,7 +24,7 @@ else
   elf2nso dongman.elf "$stage/exefs/main"
   npdmtool packaging/application.json "$stage/exefs/main.npdm"
   cp dongman.nacp "$stage/control/control.nacp"
-  cp "${DEVKITPRO}/libnx/default_icon.jpg" "$stage/control/icon_AmericanEnglish.dat"
+  cp packaging/icon.jpg "$stage/control/icon_AmericanEnglish.dat"
   test -f romfs/cacert.pem
   cp -R romfs/. "$stage/romfs/"
 fi

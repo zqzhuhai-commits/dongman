@@ -45,9 +45,9 @@ DATA		:=	data
 INCLUDES	:=	source
 APP_TITLE := 动漫共和国
 APP_AUTHOR := zqzhuhai
-APP_VERSION := 0.1.1
+APP_VERSION := 0.1.2
 APP_TITLEID := 0100D06A6E000000
-NO_ICON := 1
+ICON := packaging/icon.jpg
 ROMFS	:=	romfs
 
 #---------------------------------------------------------------------------------

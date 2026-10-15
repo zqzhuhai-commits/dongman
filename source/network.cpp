@@ -17,6 +17,8 @@ size_t write(char *data, size_t size, size_t count, void *p) {
   }
   size_t n = size * count;
   if (n > b.limit - b.data.size()) {
+    try { b.data.append(data, b.limit - b.data.size()); }
+    catch (...) { return 0; }
     b.too_large = true;
     return 0;
   }
@@ -31,8 +33,8 @@ int progress(void *, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
   return cancelling ? 1 : 0;
 }
 } // namespace
-Response get(const std::string &url, const std::string &referer,
-             const Config &c, size_t limit) {
+static Response request(const std::string &url, const std::string &referer,
+                        const Config &c, size_t limit, bool prefix) {
   if (cancelling)
     throw std::runtime_error("请求已取消");
   CURL *h = curl_easy_init();
@@ -40,8 +42,9 @@ Response get(const std::string &url, const std::string &referer,
     throw std::runtime_error("无法初始化网络");
   Buffer b{{}, limit};
   char error[CURL_ERROR_SIZE] = {};
-  curl_easy_setopt(h, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(h, CURLOPT_USERAGENT, "Mozilla/5.0 AnimeRepublicSwitch/0.1");
+  auto encoded = encode_http_url(url);
+  curl_easy_setopt(h, CURLOPT_URL, encoded.c_str());
+  curl_easy_setopt(h, CURLOPT_USERAGENT, HTTP_USER_AGENT);
   curl_easy_setopt(h, CURLOPT_REFERER, referer.c_str());
   curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
@@ -69,17 +72,29 @@ Response get(const std::string &url, const std::string &referer,
   CURLcode code = curl_easy_perform(h);
   long status = 0;
   char *effective = nullptr;
+  char *content_type = nullptr;
   curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &status);
   curl_easy_getinfo(h, CURLINFO_EFFECTIVE_URL, &effective);
+  curl_easy_getinfo(h, CURLINFO_CONTENT_TYPE, &content_type);
   std::string final = effective ? effective : url;
+  std::string mime = content_type ? content_type : "";
   curl_easy_cleanup(h);
-  if (b.too_large)
+  bool prefix_complete = prefix && b.too_large && code == CURLE_WRITE_ERROR;
+  if (b.too_large && !prefix_complete)
     throw std::runtime_error("响应超过大小限制：" + std::to_string(limit) + " 字节");
-  if (code != CURLE_OK)
+  if (code != CURLE_OK && !prefix_complete)
     throw std::runtime_error(std::string("网络失败：") +
                              (error[0] ? error : curl_easy_strerror(code)));
   if (status < 200 || status >= 300)
     throw std::runtime_error("网站返回 HTTP " + std::to_string(status) + "：" +
                              final);
-  return {std::move(b.data), std::move(final)};
+  return {std::move(b.data), std::move(final), std::move(mime)};
+}
+Response get(const std::string &url, const std::string &referer,
+             const Config &c, size_t limit) {
+  return request(url, referer, c, limit, false);
+}
+Response get_prefix(const std::string &url, const std::string &referer,
+                    const Config &c, size_t limit) {
+  return request(url, referer, c, limit, true);
 }
