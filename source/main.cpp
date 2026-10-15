@@ -79,7 +79,7 @@ Texture texture(SDL_Renderer *r, const std::string &data) {
     throw std::runtime_error("无法创建图片纹理");
   return t;
 }
-struct Result {
+struct JobResult {
   std::vector<Series> catalog;
   std::vector<Chapter> chapters;
   Series series;
@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
   SDL_Window *window = nullptr;
   SDL_Renderer *renderer = nullptr;
   TTF_Font *font = nullptr, *small = nullptr;
-  std::future<Result> job;
+  std::future<JobResult> job;
   int exit_code = 0;
   try {
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -216,18 +216,18 @@ int main(int argc, char **argv) {
     const char *channels[] = {"all", "new", "hot", "xiaoyuan", "maoxian"};
     int tab = 0, screen = 0, selected = 0, book_selected = 0, chapter = 0,
         page = 1, frame = 0;
-    float zoom = 1, pan = 0;
+    float zoom = 1, pan = 0, pan_x = 0;
     bool fit_width = false, chrome = true, running = true;
     unsigned generation = 0;
     std::string status = "正在加载漫画…";
-    std::function<Result()> pending;
-    auto schedule = [&](int kind, std::function<Result()> fn) {
+    std::function<JobResult()> pending;
+    auto schedule = [&](int kind, std::function<JobResult()> fn) {
       ++generation;
       unsigned g = generation;
       if (job.valid())
         cancelling = true;
       pending = [fn, kind, g] {
-        Result r;
+        JobResult r;
         try {
           r = fn();
         } catch (const std::exception &e) {
@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
         books.clear();
         std::string channel = channels[tab];
         schedule(1, [api, channel] {
-          Result r;
+          JobResult r;
           r.catalog = api.catalog(channel);
           return r;
         });
@@ -268,12 +268,13 @@ int main(int argc, char **argv) {
       page = std::clamp(page, 1, chapters[chapter].pages);
       zoom = 1;
       pan = 0;
+      pan_x = 0;
       screen = 2;
       page_texture.reset();
       std::string id = chapters[chapter].id;
       int requested = page;
       schedule(3, [api, id, requested] {
-        Result r;
+        JobResult r;
         r.image = api.image(id, requested);
         return r;
       });
@@ -288,7 +289,7 @@ int main(int argc, char **argv) {
       chapters.clear();
       auto s = current;
       schedule(2, [api, s] {
-        Result r;
+        JobResult r;
         r.series = api.detail(s.id);
         r.chapters = api.chapters(s.id);
         return r;
@@ -409,6 +410,13 @@ int main(int argc, char **argv) {
       for (auto &m : mapping)
         if (down & m.first)
           keys.push_back(m.second);
+      if (screen == 2) {
+        auto stick = padGetStickPos(&pad, 1);
+        if (std::abs(stick.x) > 5000)
+          pan_x += stick.x / 32767.0f * 18;
+        if (std::abs(stick.y) > 5000)
+          pan -= stick.y / 32767.0f * 18;
+      }
 #endif
       for (Key key : keys)
         try {
@@ -557,7 +565,7 @@ int main(int argc, char **argv) {
             continue;
           attempted[s.id] = true;
           schedule(4, [api, s] {
-            Result r;
+            JobResult r;
             r.series = api.detail(s.id);
             try {
               r.image = api.image(s.id);
@@ -579,8 +587,10 @@ int main(int argc, char **argv) {
                         zoom;
           int dw = int(iw * scale), dh = int(ih * scale);
           pan = std::clamp(pan, 0.0f, float(std::max(0, dh - H)));
-          SDL_Rect dst{(W - dw) / 2, dh <= H ? (H - dh) / 2 : -int(pan), dw,
-                       dh};
+          pan_x = std::clamp(pan_x, -float(std::max(0, dw - W)) / 2,
+                             float(std::max(0, dw - W)) / 2);
+          SDL_Rect dst{(W - dw) / 2 - int(pan_x),
+                       dh <= H ? (H - dh) / 2 : -int(pan), dw, dh};
           SDL_RenderCopy(renderer, page_texture.get(), nullptr, &dst);
         }
         if (chrome) {
@@ -594,7 +604,8 @@ int main(int argc, char **argv) {
                 1130, 15, 140, 30);
           box(renderer, 0, 664, W, 56, {20, 27, 43, 255});
           label(renderer, small,
-                "← → 翻页   ↑ ↓ 移动   ZL/ZR 缩放   Y 适宽   L/R 换章   A 隐藏 "
+                "← → 翻页   ↑ ↓ 移动   ZL/ZR 缩放   右摇杆 移动   Y 适宽   L/R "
+                "换章   A 隐藏 "
                 "  B 目录",
                 22, 680, 1230, 30);
         }

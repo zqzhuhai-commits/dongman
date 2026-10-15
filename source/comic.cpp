@@ -97,6 +97,21 @@ std::vector<Series> ComicApi::catalog(const std::string &channel) const {
 Series ComicApi::detail(const std::string &id) const {
   auto j = request_json(*this, base + "/api/v1/series/" + segment(id));
   auto s = series_from_json(j);
+  if (j.contains("metadata") && j["metadata"].is_object()) {
+    s.summary = j["metadata"].value("summary", s.summary);
+  }
+  if (s.author.empty() && j.contains("booksMetadata") &&
+      j["booksMetadata"].is_object()) {
+    auto authors = j["booksMetadata"].value("authors", Json::array());
+    if (authors.is_array())
+      for (const auto &author : authors) {
+        if (!author.is_object())
+          continue;
+        auto name = author.value("name", "");
+        if (!name.empty())
+          s.author += (s.author.empty() ? "" : " / ") + name;
+      }
+  }
   s.id = id;
   return s;
 }

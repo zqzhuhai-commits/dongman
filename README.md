@@ -16,7 +16,7 @@
 | --- | --- |
 | 书架 | L/R 切分类，方向键选漫画，A 打开，X 收藏，Y 刷新 |
 | 目录 | 上下选章节，左右翻目录，A 阅读或续读，X 收藏，Y 重试，B 返回 |
-| 阅读 | 左右翻页，上下移动，ZL/ZR 缩放，Y 切换整页/适宽，L/R 换章，A 隐藏工具栏，B/X 回目录，− 重试 |
+| 阅读 | 左右翻页，上下或右摇杆移动，ZL/ZR 缩放，Y 切换整页/适宽，L/R 换章，A 隐藏工具栏，B/X 回目录，− 重试 |
 | 全局 | + 退出 |
 
 桌面调试：方向键、Enter=A、Escape=B、X/Y，Q/E=L/R、Z/C=ZL/ZR、F5=−、F10=+。
@@ -47,9 +47,10 @@ Switch：devkitPro devkitA64、libnx、switch-sdl2、switch-sdl2_image、switch-
 bash scripts/test.sh
 bash scripts/test-network.sh
 bash scripts/test-comic.sh
+python3 tests/ui_test.py build/dongman-host
 ```
 
-漫画测试使用本地 HTTP 服务验证分类请求、请求头、章节条件、超过 100 章的分页、数字排序、从第 1 页取图，以及收藏与阅读进度持久化。旧视频解析测试仅覆盖保留的基础解析模块。
+漫画测试使用本地 HTTP 服务验证分类请求、请求头、章节条件、超过 100 章的分页、数字排序、从第 1 页取图，以及收藏与阅读进度持久化。端到端界面测试通过真实 SDL 事件检查打开漫画、选章、翻页、缩放、返回和续读。旧视频解析测试仅覆盖保留的基础解析模块。
 
 独立 NSP 打包：设置本地 `SWITCH_KEYS_FILE`、`HACBREWPACK`，执行 `bash scripts/package-nsp.sh`；也可以设置 `NSP_INPUT_DIR` 使用 CI 产出的输入。此步骤使用自备的 Switch 密钥，密钥不得提交仓库或上传到公开构建日志。
 

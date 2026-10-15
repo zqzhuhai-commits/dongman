@@ -17,6 +17,8 @@ jobs:
       - run: bash scripts/test-network.sh
       - run: bash scripts/test-comic.sh
       - run: /tmp/dongman --help
+      - name: Exercise complete comic reader UI
+        run: python3 tests/ui_test.py /tmp/dongman
   switch:
     runs-on: ubuntu-latest
     container: devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
