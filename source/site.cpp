@@ -140,6 +140,19 @@ void Config::load(const std::string &path) {
   }
   *this = std::move(next);
 }
+Config runtime_config(const std::string &optional_path,
+                      const std::string &bundled_ca) {
+  Config config; // Built-in site and parser defaults need no external INI.
+  if (std::ifstream(optional_path).good())
+    config.load(optional_path);
+  // Old SD configurations may still point to a deleted external CA bundle.
+  if (config.ca_file.empty() || !std::ifstream(config.ca_file).good()) {
+    if (bundled_ca.empty() || !std::ifstream(bundled_ca).good())
+      throw std::runtime_error("无法读取内置 CA 证书，请重新安装完整程序");
+    config.ca_file = bundled_ca;
+  }
+  return config;
+}
 std::string html_decode(std::string s) {
   for (auto pair : {std::pair<const char *, const char *>("&amp;", "&"),
                     {"&quot;", "\""},

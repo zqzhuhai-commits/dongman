@@ -95,5 +95,26 @@ int main() {
   failed = false;
   try { c.load(path); } catch (const std::exception &) { failed = true; }
   assert(failed);
+  // No SD files: defaults and the application-owned CA must be sufficient.
+  auto internal = runtime_config(path, "romfs/cacert.pem");
+  assert(internal.base == "https://omofun.org.cn/" &&
+         internal.ca_file == "romfs/cacert.pem");
+  {
+    std::ofstream out(path);
+    out << "base_url=https://example.org/\n"
+           "ca_file=sdmc:/switch/dongman/cacert.pem\n";
+  }
+  auto legacy = runtime_config(path, "romfs/cacert.pem");
+  assert(legacy.base == base && legacy.ca_file == "romfs/cacert.pem");
+  {
+    std::ofstream out(path);
+    out << "ca_file=romfs/cacert.pem\n";
+  }
+  assert(runtime_config(path, "/missing-bundle").ca_file == "romfs/cacert.pem");
+  unlink(path);
+  failed = false;
+  try { runtime_config(path, "/missing-bundle"); }
+  catch (const std::exception &) { failed = true; }
+  assert(failed); // Never solve a missing CA by disabling TLS verification.
   std::cout << "All parser tests passed\n";
 }

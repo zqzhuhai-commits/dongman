@@ -39,6 +39,7 @@ jobs:
           cp /tmp/dongman-main.npdm nsp-inputs/exefs/main.npdm
           cp dongman.nacp nsp-inputs/control/control.nacp
           cp "$DEVKITPRO/libnx/default_icon.jpg" nsp-inputs/control/icon_AmericanEnglish.dat
+          cp -R romfs nsp-inputs/romfs
       - uses: actions/upload-artifact@v4
         with:
           name: dongman-nsp-inputs
@@ -48,7 +49,6 @@ jobs:
         run: |
           mkdir -p dist/switch/dongman
           cp dongman.nro packaging/config.ini packaging/ghgdm.ini dist/switch/dongman/
-          curl --fail --location https://curl.se/ca/cacert.pem --output dist/switch/dongman/cacert.pem
       - name: Build hacBrewPack
         if: env.SWITCH_PROD_KEYS != ''
         run: |

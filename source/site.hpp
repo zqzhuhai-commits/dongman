@@ -14,6 +14,8 @@ struct Config {
               episode_pattern = "/(?:vodplay|play|v)/", ca_file;
   void load(const std::string &path);
 };
+Config runtime_config(const std::string &optional_path,
+                      const std::string &bundled_ca);
 std::string absolute_url(const std::string &base, const std::string &path);
 std::string html_decode(std::string s);
 std::vector<Anime> parse_catalog(const std::string &html,

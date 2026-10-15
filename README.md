@@ -6,6 +6,7 @@
 
 - 已恢复完整客户端，替换仅显示 Welcome 的入口及占位播放器。包含异步 HTTP、封面网格、本页目录分屏浏览、分集与播放源区分、MP4/HLS 地址解析、播放/暂停、快进快退、中文系统字体和 TLS 验证。
 - 新增：B 取消加载、X 重读配置并刷新；配置错误与播放命令错误可在界面中恢复。
+- 0.1.1：站点默认配置编译进程序，Mozilla CA 证书包内置于 RomFS。NSP 安装后无需在 SD 卡保留 `config.ini` 或 `cacert.pem`；NRO 也包含同一证书资源。
 - 已验证：解析器回归、配置加载、HTTP 重定向/错误/大小限制/取消、Linux 完整客户端编译。播放器测试使用自行生成的视频验证解码、画面渲染、暂停、跳转和停止。原生 NRO 由 GitHub Actions 单独构建验证。
 - 2026-10-15 已读取 OMOFUN 真实首页、详情与播放页：识别 48 个目录项、一个详情页的 631 个分集链接（含多播放源）及媒体地址。默认规则已加入 `/p/` 与 `/v/`。指定样本的媒体服务器返回 “Site Unavailable”，**真实网站视频及 Switch 实机播放仍未验证成功**；`cn.ghgdm.com.cn` 返回 HTTP 400，保留为未验证配置。
 - 播放器当前使用 CPU 解码和 640×360 软件渲染再缩放至屏幕，不承诺高清流畅播放。高码率视频可能卡顿，硬件解码是后续工作。
@@ -17,12 +18,7 @@
 
 推送及 PR 默认生成 `switch/dongman/dongman.nro` 和 SD 卡配置文件。要生成 **`dongman.nsp`**，在仓库 **Settings → Secrets and variables → Actions** 添加名为 `SWITCH_PROD_KEYS` 的 secret，值为你自己合法取得的密钥文件内容，然后手动运行工作流。只有手动运行会读取此 secret；缺少密钥时明确跳过 NSP。请勿在 Issue、聊天、源码或公开文件中提供密钥。
 
-NSP 是独立程序，不是指向 SD 卡 NRO 的转发器。配置与 CA 文件仍需在 SD 卡中：
-
-```
-switch/dongman/config.ini
-switch/dongman/cacert.pem
-```
+NSP 是包含原生程序和 RomFS 证书资源的独立应用。安装后使用内置 OMOFUN 配置，无需 SD 卡配置文件或证书文件。需要自定义网站时，可选创建 `switch/dongman/config.ini` 覆盖默认配置；删除它便恢复默认配置。旧配置指向的外部证书不存在时，自动使用内置证书。
 
 安装 NSP 后从 HOME 菜单启动；NRO 调试请使用完整应用模式的 Homebrew Menu。错误日志位于 `sdmc:/switch/dongman/error.log`。
 
@@ -35,7 +31,7 @@ base_url=https://omofun.org.cn/
 listing_path=/
 detail_pattern=/(?:voddetail|detail|show|vod|p)/
 episode_pattern=/(?:vodplay|play|v)/
-ca_file=sdmc:/switch/dongman/cacert.pem
+ca_file=romfs:/cacert.pem
 ```
 
 `detail_pattern` 和 `episode_pattern` 是 C++ ECMAScript 正则；匹配详情链接与分集链接。封面读取 `data-original`、`data-src`、`src`。支持 `<video src>`、`<source src>` 和常见 `player_xxx` 对象的直连 URL，包含明文、百分号编码及 Base64 编码。
@@ -78,7 +74,7 @@ SWITCH_KEYS_FILE=/absolute/path/to/prod.keys HACBREWPACK=/absolute/path/to/hacbr
 NSP_INPUT_DIR=/absolute/path/to/nsp-inputs SWITCH_KEYS_FILE=/absolute/path/to/prod.keys HACBREWPACK=/absolute/path/to/hacbrewpack bash scripts/package-nsp.sh
 ```
 
-此流程仅在本机使用密钥，输入包只含本项目的原生程序、控制信息和图标。
+此流程仅在本机使用密钥，输入包包含原生程序、控制信息、图标和 `romfs/cacert.pem`，打包时必须一起保留。CA 来自 [curl 的 Mozilla CA bundle](https://curl.se/docs/caextract.html)，随应用版本更新。
 
 仅测试解析器：
 
@@ -92,12 +88,10 @@ Linux 安装 SDL2、SDL2_image、SDL2_ttf、libmpv、libcurl 开发包、pkg-con
 bash scripts/test-network.sh
 bash scripts/test-player.sh
 bash scripts/build-host.sh
-cp packaging/config.ini /tmp/dongman.ini
-# 将 /tmp/dongman.ini 的 ca_file 值清空，使用本机系统 CA；Switch 配置保持原样。
-build/dongman-host --config /tmp/dongman.ini --font /path/to/chinese.ttf
+build/dongman-host --font /path/to/chinese.ttf
 ```
 
-桌面操作：方向键选择、Enter 确认/暂停、Esc 返回/取消、R 重读配置，关闭窗口退出。默认桌面字体不含中文，使用中文 TTF 才能正常显示中文。
+从仓库根目录运行，桌面也会回退使用 `romfs/cacert.pem`；可通过 `--config /path/to/config.ini` 指定可选配置。方向键选择、Enter 确认/暂停、Esc 返回/取消、R 重读配置，关闭窗口退出。默认桌面字体不含中文，使用中文 TTF 才能正常显示中文。
 
 ## 源码说明
 

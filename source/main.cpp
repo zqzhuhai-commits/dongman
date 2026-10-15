@@ -131,6 +131,13 @@ std::string root() {
   return "packaging";
 #endif
 }
+std::string bundled_ca() {
+#ifdef __SWITCH__
+  return "romfs:/cacert.pem";
+#else
+  return "romfs/cacert.pem";
+#endif
+}
 } // namespace
 int main(int argc, char **argv) {
   std::string config_path = root() + "/config.ini";
@@ -157,7 +164,10 @@ int main(int argc, char **argv) {
 #endif
 #ifdef __SWITCH__
   socketInitializeDefault();
-  romfsInit();
+  if (R_FAILED(romfsInit())) {
+    socketExit();
+    return 1;
+  }
   padConfigureInput(1, HidNpadStyleSet_NpadStandard);
   PadState pad;
   padInitializeDefault(&pad);
@@ -250,8 +260,7 @@ int main(int argc, char **argv) {
     };
     auto reload_catalog = [&]() {
       try {
-        Config updated;
-        updated.load(config_path);
+        Config updated = runtime_config(config_path, bundled_ca());
         config = std::move(updated);
         start(0, absolute_url(config.base, config.listing));
       } catch (const std::exception &e) {
