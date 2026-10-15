@@ -683,7 +683,7 @@ int main(int argc, char **argv) {
           label(renderer, small,
                 "← → 翻页   ↑ ↓ 移动   ZL/ZR 缩放   右摇杆 移动   Y 适宽   L/R "
                 "换章   A 隐藏 "
-                "  B 目录   − 横竖切换",
+                "  B 目录   [-] 横竖切换",
                 22, rh - footer + 12, rw - 44, footer - 16);
         }
       } else {
