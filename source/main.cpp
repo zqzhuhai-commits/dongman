@@ -308,7 +308,10 @@ int main(int argc, char **argv) {
         if (result.generation == generation) {
           if (!result.error.empty()) {
             if (result.kind != 4)
-              status = result.error + "  按 Y 重试";
+              status = result.error +
+                       (result.kind == 3 ? "  按 − 重试" : "  按 Y 重试");
+            else
+              status = "部分书名或封面加载失败，按 Y 刷新重试";
           } else if (result.kind == 1) {
             books = std::move(result.catalog);
             status = books.empty() ? "这个分类暂无漫画" : "";
