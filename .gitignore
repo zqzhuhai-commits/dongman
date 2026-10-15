@@ -10,3 +10,4 @@ dist/
 *.pem
 error.log
 .nsp-stage/
+nsp-inputs/

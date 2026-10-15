@@ -32,6 +32,18 @@ jobs:
         run: |
           elf2nso dongman.elf /tmp/dongman-main
           npdmtool packaging/application.json /tmp/dongman-main.npdm
+      - name: Assemble local NSP packaging inputs
+        run: |
+          mkdir -p nsp-inputs/exefs nsp-inputs/control
+          cp /tmp/dongman-main nsp-inputs/exefs/main
+          cp /tmp/dongman-main.npdm nsp-inputs/exefs/main.npdm
+          cp dongman.nacp nsp-inputs/control/control.nacp
+          cp "$DEVKITPRO/libnx/default_icon.jpg" nsp-inputs/control/icon_AmericanEnglish.dat
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dongman-nsp-inputs
+          path: nsp-inputs/
+          if-no-files-found: error
       - name: Assemble SD card files
         run: |
           mkdir -p dist/switch/dongman

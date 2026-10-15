@@ -72,6 +72,14 @@ SWITCH_KEYS_FILE=/absolute/path/to/prod.keys HACBREWPACK=/absolute/path/to/hacbr
 
 结果为 `dist/dongman.nsp`。Title ID 为 `0100D06A6E000000`；安装前检查没有与已有应用冲突。
 
+也可下载 Actions 的 `dongman-nsp-inputs`，解压到本地目录后打包，无需本地 Switch SDK：
+
+```sh
+NSP_INPUT_DIR=/absolute/path/to/nsp-inputs SWITCH_KEYS_FILE=/absolute/path/to/prod.keys HACBREWPACK=/absolute/path/to/hacbrewpack bash scripts/package-nsp.sh
+```
+
+此流程仅在本机使用密钥，输入包只含本项目的原生程序、控制信息和图标。
+
 仅测试解析器：
 
 ```sh
